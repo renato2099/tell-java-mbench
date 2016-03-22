@@ -17,7 +17,7 @@ public class ServerCmd {
 
     private ServerCmdType type;
     private Object args[];
-    public static int CMD_SIZE = 24;
+    public static int CMD_SIZE = 25;
 
     public ServerCmd() {
     }

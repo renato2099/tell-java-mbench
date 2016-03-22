@@ -100,17 +100,17 @@ public class CassandraMbServer extends MbServer {
                         sb.append("int,");
                         break;
                     case 3:case 4:
-                        sb.append("short,");
+                        sb.append("int,");
                         break;
                     case 5:case 6:
-                        sb.append("long,");
+                        sb.append("bigint,");
                         break;
                     case 8:case 9:
                         sb.append("varchar,");
                         break;
                 }
             }
-            sb.append(",").append("PRIMARY KEY (id)");
+            sb.append("PRIMARY KEY (id)");
             sb.append(");");
 
             try {
@@ -194,7 +194,7 @@ public class CassandraMbServer extends MbServer {
         try {
             commandLine = parser.parse(options, args);
             clNode = commandLine.getOptionValue("cn");
-            nodePort = commandLine.getOptionValue("np", "60000");
+            nodePort = commandLine.getOptionValue("np", "9042");
         } catch (ParseException exception) {
             Log.error("Parse error: ");
             new HelpFormatter().printHelp("mbench-server", options);

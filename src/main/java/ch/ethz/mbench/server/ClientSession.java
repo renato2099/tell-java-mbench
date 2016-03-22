@@ -17,6 +17,7 @@ public class ClientSession {
     private SelectionKey selectionKey;
     private SocketChannel channel;
 
+
     public ClientSession(SelectionKey readKey, SocketChannel acceptedChannel) {
         this.selectionKey = readKey;
         this.channel = acceptedChannel;
@@ -38,11 +39,15 @@ public class ClientSession {
 
     public ServerCmd readCmd() {
         int bytesRead = -1;
+
         try {
-            bytesRead = channel.read((ByteBuffer) getReadBuffer().clear());
+            bytesRead = channel.read((ByteBuffer) readBuffer.clear());
         } catch (Throwable t) {
             // ignoring exception, if nothing is read we'll disconnect
         }
+        readBuffer.flip();
+        long actualSz = readBuffer.getLong();
+
 
         if (bytesRead == -1) disconnect();
         if (bytesRead < 0) return null;
