@@ -198,6 +198,11 @@ public class HbaseMbServer extends MbServer {
                 e.printStackTrace();
             }
         }
+
+        @Override
+        public long query1() {
+            throw new RuntimeException("Query not supported!");
+        }
     }
 
     public static Configuration createHBaseConf() throws IOException {

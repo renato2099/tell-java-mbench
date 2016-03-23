@@ -110,10 +110,32 @@ public abstract class MbServer {
                 break;
             case GET:
                 break;
+            case Q1:
+                futures.add(service.submit(() -> {
+                    Object[] args = scm.getArgs();
+                    Response resp = query1();
+                    resp.setClientSession(clieSession);
+                    return resp;
+                }));
+                break;
+            case Q2:
+                break;
+            case Q3:
+                break;
             case DISCONNECT:
                 clieSession.disconnect();
                 break;
         }
+    }
+
+    private Response query1() {
+        long t0 = System.nanoTime();
+
+        Transaction tx = mConnection.startTx();
+        long numRecords = tx.query1();
+        tx.commit();
+        long responseTime = System.nanoTime() - t0;
+        return new Response(responseTime, numRecords);
     }
 
     protected Response doBatchOp(double iProb, double dProb, double uProb,
@@ -229,6 +251,8 @@ public abstract class MbServer {
         void remove(Long key);
 
         void get(Long key);
+
+        long query1();
     }
 
     public Options getCmdLineOptions() {

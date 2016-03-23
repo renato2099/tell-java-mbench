@@ -2,16 +2,13 @@ package ch.ethz.mbench.server.cassandra;
 
 import ch.ethz.mbench.server.MbServer;
 import ch.ethz.mbench.server.Tuple;
-import com.datastax.driver.core.querybuilder.Delete;
-import com.datastax.driver.core.querybuilder.Update;
+import com.datastax.driver.core.querybuilder.*;
 import org.apache.commons.cli.*;
 
 import java.io.IOException;
 import java.util.concurrent.ExecutionException;
 
 import com.datastax.driver.core.*;
-import com.datastax.driver.core.querybuilder.Batch;
-import com.datastax.driver.core.querybuilder.QueryBuilder;
 import org.apache.log4j.Logger;
 
 import static com.datastax.driver.core.querybuilder.QueryBuilder.eq;
@@ -110,7 +107,8 @@ public class CassandraMbServer extends MbServer {
                         break;
                 }
             }
-            sb.append("PRIMARY KEY (id)");
+            sb.append("PRIMARY KEY ((id), A3)");
+//            sb.append("PRIMARY KEY (id)");
             sb.append(");");
 
             try {
@@ -182,6 +180,13 @@ public class CassandraMbServer extends MbServer {
                     .from(CONTAINER, TABLE_NAME)
                     .where(eq("id", key));
             batch.add(get);
+        }
+
+        @Override
+        public long query1() {
+            Select count = QueryBuilder.select().column("A3").countAll().from(CONTAINER, TABLE_NAME);
+            ResultSet rs = session.execute(count);
+            return rs.all().size();
         }
     }
 

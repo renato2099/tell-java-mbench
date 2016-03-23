@@ -8,7 +8,7 @@ import java.nio.ByteBuffer;
 public class ServerCmd {
 
     public enum ServerCmdType {
-        POPULATE(0), BATCH_OP (1), GET(2), DISCONNECT(3);
+        POPULATE(0), BATCH_OP (1), GET(2), DISCONNECT(3), Q1(4), Q2(5), Q3(6);
         short val;
         ServerCmdType(int v) {
             this.val = (short)v;
