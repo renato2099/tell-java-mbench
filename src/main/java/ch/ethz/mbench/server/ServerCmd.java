@@ -8,10 +8,30 @@ import java.nio.ByteBuffer;
 public class ServerCmd {
 
     public enum ServerCmdType {
-        POPULATE(0), BATCH_OP (1), GET(2), DISCONNECT(3);
+        CREATE_SCHEMA(1), POPULATE(2), BATCH_OP(3), Q1(4), Q2(5), Q3(6), DISCONNECT(7);
         short val;
         ServerCmdType(int v) {
             this.val = (short)v;
+        }
+        public static ServerCmdType fromInt (int v) {
+            switch (v) {
+                case 1:
+                    return CREATE_SCHEMA;
+                case 2:
+                    return POPULATE;
+                case 3:
+                    return BATCH_OP;
+                case 4:
+                    return Q1;
+                case 5:
+                    return Q2;
+                case 6:
+                    return Q3;
+                case 7:
+                    return DISCONNECT;
+                default:
+                    throw new RuntimeException("Unknown Command-id" + v);
+            }
         }
     }
 
@@ -40,7 +60,7 @@ public class ServerCmd {
                 break;
             case BATCH_OP:
                 break;
-            case GET:
+            case Q1:
                 break;
             case DISCONNECT:
                 break;
@@ -50,22 +70,21 @@ public class ServerCmd {
 
     public static ServerCmd decodeCmd(ByteBuffer bb) {
         ServerCmd scm = new ServerCmd();
-        int pos = 0;
-        scm.type = ServerCmd.ServerCmdType.values()[bb.getShort(0)];
-        pos += 4;
+        long bSize = bb.getLong();
+        scm.type = ServerCmdType.fromInt(bb.getInt());
         switch (scm.type) {
+            case CREATE_SCHEMA:
+                // TODO: add schema creation here?
+                break;
             case POPULATE:
                 scm.args = new Object[2];
-                bb.position(pos);
-                scm.args[0] = bb.getLong(pos);
-                pos += 8;
-                bb.position(pos);
-                scm.args[1] = bb.getLong(pos);
+                scm.args[0] = bb.getLong();
+                scm.args[1] = bb.getLong();
                 System.out.println("cmd =>" + scm.args[0] + " "+scm.args[1]);
                 break;
             case BATCH_OP:
                 break;
-            case GET:
+            case Q1:
                 break;
             case DISCONNECT:
                 break;

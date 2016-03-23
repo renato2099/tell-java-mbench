@@ -1,6 +1,7 @@
 package ch.ethz.mbench.server;
 
 import org.apache.commons.cli.*;
+import org.apache.commons.collections.iterators.ObjectArrayIterator;
 import org.apache.log4j.Logger;
 
 import java.io.IOException;
@@ -83,7 +84,7 @@ public abstract class MbServer {
             Future<Response> future = futures.poll();
             Response resp = future.get();
             // TODO fix client response encoding
-            resp.getClientSession().writeResponse(resp.getResponseTime(), resp.getNumRecords());
+            resp.getClientSession().writeResponse(resp.getResults());
         }
     }
 
@@ -91,6 +92,11 @@ public abstract class MbServer {
         ServerCmd scm = clieSession.readCmd();
         if (scm == null) return;
         switch (scm.getType()) {
+            case CREATE_SCHEMA:
+                futures.add(service.submit(() -> {
+                    Response resp = new Re
+                }));
+                break;
             case POPULATE:
                 futures.add(service.submit(() -> {
                     Object[] args = scm.getArgs();
@@ -107,8 +113,6 @@ public abstract class MbServer {
                     resp.setClientSession(clieSession);
                     return resp;
                 }));
-                break;
-            case GET:
                 break;
             case DISCONNECT:
                 clieSession.disconnect();

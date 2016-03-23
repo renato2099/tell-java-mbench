@@ -2,10 +2,12 @@ package ch.ethz.mbench.server;
 
 import java.io.IOException;
 import java.nio.ByteBuffer;
+import java.nio.ByteOrder;
 import java.nio.CharBuffer;
 import java.nio.channels.SelectionKey;
 import java.nio.channels.SocketChannel;
 import java.nio.charset.Charset;
+import java.lang.instrument.Instrumentation;
 
 /**
  * Contains information needed to manage client connections to server
@@ -17,12 +19,16 @@ public class ClientSession {
     private SelectionKey selectionKey;
     private SocketChannel channel;
 
+    private static Instrumentation instrumentation;
+    private static byte zeroByte = 0, oneByte = 1;
 
     public ClientSession(SelectionKey readKey, SocketChannel acceptedChannel) {
         this.selectionKey = readKey;
         this.channel = acceptedChannel;
         readBuffer = ByteBuffer.allocate(ServerCmd.CMD_SIZE);
+        readBuffer.order(ByteOrder.nativeOrder());
         writeBuffer = ByteBuffer.allocate(ServerCmd.CMD_SIZE);
+        writeBuffer.order(ByteOrder.nativeOrder());
     }
 
     public void disconnect() {
@@ -46,29 +52,30 @@ public class ClientSession {
             // ignoring exception, if nothing is read we'll disconnect
         }
         readBuffer.flip();
-        long actualSz = readBuffer.getLong();
-
-
         if (bytesRead == -1) disconnect();
         if (bytesRead < 0) return null;
-
-//        getReadBuffer().flip();
         ServerCmd serverCmd = ServerCmd.decodeCmd(getReadBuffer());
         getReadBuffer().clear();
         return serverCmd;
     }
 
-    public void writeResponse(long respTime, long numRecords) {
+    public void writeResponse(Object[] results) {
         try {
-            StringBuilder stringBuilder = new StringBuilder();
-            stringBuilder.append(respTime).append("-");
-            stringBuilder.append(numRecords);
-            CharBuffer buffer = CharBuffer.wrap(stringBuilder.toString());
-            while (buffer.hasRemaining())
-                channel.write(Charset.defaultCharset().encode(buffer));
-            buffer.clear();
-//            getWriteBuffer().flip();
-//            getWriteBuffer().clear();
+            long totalSize = 0;
+            for (Object o: results) {
+                totalSize += instrumentation.getObjectSize(o);
+            }
+            getWriteBuffer().clear();
+            getWriteBuffer().putLong(totalSize);
+            for (Object o: results) {
+                if (o instanceof Boolean) {
+                    Boolean b = (Boolean) o;
+                    getWriteBuffer().put(b ? oneByte : zeroByte);
+                } else if (o instanceof Short) {
+                    //TODO: continue...
+                }
+            }
+
         } catch (IOException e) {
             e.printStackTrace();
         }
