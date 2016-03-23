@@ -5,25 +5,19 @@ package ch.ethz.mbench.server;
  */
 public class Response {
 
-    private final long responseTime;
-    private final long numRecords;
+    private Object[] results;
     private ClientSession clientSession;
 
-    public Response(long responseTime) {
-        this.responseTime = responseTime;
-        this.numRecords = 0;
-    }
-    public Response(long responseTime, long numRecords) {
-        this.responseTime = responseTime;
-        this.numRecords = numRecords;
+    public Response(Object...results) {
+        this.results = results;
     }
 
-    public long getResponseTime() {
-        return responseTime;
+    public void setResult(Object result, int i) {
+        results[i] = result;
     }
 
-    public long getNumRecords() {
-        return numRecords;
+    public Object[] getResults() {
+        return results;
     }
 
     public void setClientSession(ClientSession clientSession) {
