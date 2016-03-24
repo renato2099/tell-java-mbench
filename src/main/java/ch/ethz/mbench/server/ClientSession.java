@@ -3,11 +3,8 @@ package ch.ethz.mbench.server;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
-import java.nio.CharBuffer;
 import java.nio.channels.SelectionKey;
 import java.nio.channels.SocketChannel;
-import java.nio.charset.Charset;
-import java.lang.instrument.Instrumentation;
 
 /**
  * Contains information needed to manage client connections to server
@@ -19,7 +16,6 @@ public class ClientSession {
     private SelectionKey selectionKey;
     private SocketChannel channel;
 
-    private static Instrumentation instrumentation;
     private static byte zeroByte = 0, oneByte = 1;
 
     public ClientSession(SelectionKey readKey, SocketChannel acceptedChannel) {
@@ -59,20 +55,53 @@ public class ClientSession {
         return serverCmd;
     }
 
+    private long getResultBufferSize(Object[] results) throws IOException {
+        long result = 8;    // 8 bytes for encoding the total size
+        for (Object o: results) {
+            if (o instanceof Boolean || o instanceof Byte) {
+                result += 1;
+            } else if (o instanceof Short) {
+                result += 2;
+            } else if (o instanceof Integer || o instanceof Float) {
+                result += 4;
+            } else if (o instanceof Long || o instanceof Double) {
+                result += 8;
+            } else if (o instanceof String) {
+                result += 4;    // encode string length
+                result += (((String) o).getBytes("UTF-8").length);
+            } else {
+                throw new RuntimeException("no known object serialization method for object " + o.toString());
+            }
+        }
+        return result;
+    }
+
     public void writeResponse(Object[] results) {
         try {
-            long totalSize = 0;
-            for (Object o: results) {
-                totalSize += instrumentation.getObjectSize(o);
-            }
             getWriteBuffer().clear();
-            getWriteBuffer().putLong(totalSize);
+            getWriteBuffer().putLong(getResultBufferSize(results));
             for (Object o: results) {
                 if (o instanceof Boolean) {
                     Boolean b = (Boolean) o;
                     getWriteBuffer().put(b ? oneByte : zeroByte);
+                } else if (o instanceof Byte) {
+                    getWriteBuffer().put((Byte) o);
                 } else if (o instanceof Short) {
-                    //TODO: continue...
+                    getWriteBuffer().putShort((Short) o);
+                } else if (o instanceof Integer) {
+                    getWriteBuffer().putInt((Integer) o);
+                } else if (o instanceof Float) {
+                    getWriteBuffer().putFloat((Float) o);
+                } else if (o instanceof Long) {
+                    getWriteBuffer().putLong((Long) o);
+                } else if (o instanceof Double) {
+                    getWriteBuffer().putDouble((Double) o);
+                } else if (o instanceof String) {
+                    byte[] utf8Arr = ((String) o).getBytes("UTF-8");
+                    getWriteBuffer().putInt(utf8Arr.length);
+                    getWriteBuffer().put(utf8Arr);
+                } else {
+                    throw new RuntimeException("no known object serialization method for object " + o.toString());
                 }
             }
 

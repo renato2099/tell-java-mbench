@@ -83,7 +83,6 @@ public abstract class MbServer {
         while (!futures.isEmpty()) {
             Future<Response> future = futures.poll();
             Response resp = future.get();
-            // TODO fix client response encoding
             resp.getClientSession().writeResponse(resp.getResults());
         }
     }
@@ -94,7 +93,9 @@ public abstract class MbServer {
         switch (scm.getType()) {
             case CREATE_SCHEMA:
                 futures.add(service.submit(() -> {
-                    Response resp = new Re
+                    // TODO: add schema creation here if necessary, otherwise don't do anything
+                    Response resp = new Response(new Object[] {true, ""});
+                    return resp;
                 }));
                 break;
             case POPULATE:
@@ -111,6 +112,28 @@ public abstract class MbServer {
                     Response resp = doBatchOp((double) args[0], (double) args[1], (double) args[2],
                             (int) args[3], (long) args[4], (long) args[5], (int) args[6], (int) args[7]);
                     resp.setClientSession(clieSession);
+                    return resp;
+                }));
+                break;
+            case Q1:
+                futures.add(service.submit(() -> {
+                    // TODO: implement
+                    long responseTime = 0;
+                    Response resp = new Response(new Object[] {true, "", responseTime});
+                    return resp;
+                }));
+                break;
+            case Q2:
+                futures.add(service.submit(() -> {
+                    long responseTime = 0;
+                    Response resp = new Response(new Object[] {false, "Q2 is not implemented", responseTime});
+                    return resp;
+                }));
+                break;
+            case Q3:
+                futures.add(service.submit(() -> {
+                    long responseTime = 0;
+                    Response resp = new Response(new Object[] {false, "Q3 is not implemented", responseTime});
                     return resp;
                 }));
                 break;
@@ -188,7 +211,13 @@ public abstract class MbServer {
         tx.commit();
 
         long responseTime = System.nanoTime() - t0;
-        return new Response(responseTime);
+        // TODO: handle error case correctly (now we assume everything went fine)
+        boolean success = true;
+        String errorMsg = "";
+        // TODO: return the correct keys here (baseInsertKey is the biggest key currently in the database for the
+        // TODO: corresponding client-id and baseDeleteKey ist the smallest key currently present)
+        long baseInsertKey = 0, baseDeleteKey = 0;
+        return new Response(new Object[] {success, errorMsg, baseInsertKey, baseDeleteKey, responseTime});
     }
 
     public Response populate(long start, long end) {
@@ -205,7 +234,10 @@ public abstract class MbServer {
         }
         tx.commit();
         long responseTime = System.nanoTime() - t0;
-        return new Response(responseTime, end - start);
+        // TODO: handle error case correctly (now we assume everything went fine)
+        boolean success = true;
+        String errorMsg = "";
+        return new Response(new Object[] {success, errorMsg, responseTime});
 
     }
 
