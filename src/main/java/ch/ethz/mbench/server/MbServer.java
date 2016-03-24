@@ -23,7 +23,8 @@ public abstract class MbServer {
     // server threads
     private ExecutorService service;
     private Queue<Future<Response>> futures;
-    private Connection mConnection;
+//    private Connection mConnection;
+    private Queue<Connection> mConnections;
 
     // nio
     private Selector selector;
@@ -35,8 +36,10 @@ public abstract class MbServer {
     public void initialize() {
         service = Executors.newFixedThreadPool(numAsioThreads);
         futures = new ConcurrentLinkedQueue<>();
-        mConnection = createConnection();
-        mConnection.createSchema(nCols);
+        for (int i = 0; i < numAsioThreads; i++) {
+            mConnections.add(createConnection());
+        }
+
     }
 
     public void run() throws IOException, ExecutionException, InterruptedException {
@@ -85,6 +88,8 @@ public abstract class MbServer {
             Response resp = future.get();
             // TODO fix client response encoding
             resp.getClientSession().writeResponse(resp.getResults());
+            // give back connection to conn-pool
+            mConnections.add(resp.getConnection());
         }
     }
 
@@ -94,13 +99,14 @@ public abstract class MbServer {
         switch (scm.getType()) {
             case CREATE_SCHEMA:
                 futures.add(service.submit(() -> {
-                    return new Response();
+                    Response resp = createSchema(nCols, mConnections.remove());
+                    return resp;
                 }));
                 break;
             case POPULATE:
                 futures.add(service.submit(() -> {
                     Object[] args = scm.getArgs();
-                    Response resp = populate((Long) args[0], (Long) args[1]);
+                    Response resp = populate((Long) args[0], (Long) args[1], mConnections.remove());
                     resp.setClientSession(clieSession);
                     return resp;
                 }));
@@ -109,15 +115,15 @@ public abstract class MbServer {
                 futures.add(service.submit(() -> {
                     Object[] args = scm.getArgs();
                     Response resp = doBatchOp((double) args[0], (double) args[1], (double) args[2],
-                            (int) args[3], (long) args[4], (long) args[5], (int) args[6], (int) args[7]);
+                            (int) args[3], (long) args[4], (long) args[5], (int) args[6], (int) args[7],
+                            mConnections.remove());
                     resp.setClientSession(clieSession);
                     return resp;
                 }));
                 break;
             case Q1:
                 futures.add(service.submit(() -> {
-                    Object[] args = scm.getArgs();
-                    Response resp = query1();
+                    Response resp = query1(mConnections.remove());
                     resp.setClientSession(clieSession);
                     return resp;
                 }));
@@ -132,19 +138,22 @@ public abstract class MbServer {
         }
     }
 
-    private Response query1() {
+    private Response query1(Connection mConnection) {
         long t0 = System.nanoTime();
 
         Transaction tx = mConnection.startTx();
         long numRecords = tx.query1();
         tx.commit();
         long responseTime = System.nanoTime() - t0;
-        return new Response(responseTime, numRecords);
+        Response resp = new Response();
+        resp.setConnection(mConnection);
+        resp.setResult(responseTime, 0);
+        return resp;
     }
 
     protected Response doBatchOp(double iProb, double dProb, double uProb,
                                  int nOps, long baseDelKey, long baseInsKey,
-                                 int clientId, int nClients) {
+                                 int clientId, int nClients, Connection mConnection) {
         double gProb = 1.0 - iProb - dProb - uProb;
         if (gProb < 0.0) {
             throw new RuntimeException("Probabilities sum up to negative number");
@@ -210,11 +219,15 @@ public abstract class MbServer {
         tx.commit();
 
         long responseTime = System.nanoTime() - t0;
-        return new Response(responseTime);
+        Response resp = new Response();
+        resp.setConnection(mConnection);
+        resp.setResult(responseTime, 0);
+        return resp;
     }
 
-    public Response populate(long start, long end) {
+    public Response populate(long start, long end, Connection mConnection) {
         Transaction tx = mConnection.startTx();
+        // TODO Fix this
         start = 0;
         end = 10;
         Map<Long, Tuple> inserts = new HashMap<>();
@@ -227,8 +240,18 @@ public abstract class MbServer {
         }
         tx.commit();
         long responseTime = System.nanoTime() - t0;
-        return new Response(responseTime, end - start);
+        Response resp = new Response();
+        resp.setConnection(mConnection);
+        resp.setResult(responseTime, 0);
+        return resp;
 
+    }
+
+    public Response createSchema(int nCols, Connection mConnection) {
+        mConnection.createSchema(nCols);
+        Response resp = new Response();
+        resp.setConnection(mConnection);
+        return resp;
     }
 
     protected abstract Connection createConnection();
