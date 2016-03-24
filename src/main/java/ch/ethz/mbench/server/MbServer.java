@@ -36,6 +36,7 @@ public abstract class MbServer {
     public void initialize() {
         service = Executors.newFixedThreadPool(numAsioThreads);
         futures = new ConcurrentLinkedQueue<>();
+        mConnections = new ConcurrentLinkedQueue<>();
         for (int i = 0; i < numAsioThreads; i++) {
             mConnections.add(createConnection());
         }
@@ -99,6 +100,7 @@ public abstract class MbServer {
             case CREATE_SCHEMA:
                 futures.add(service.submit(() -> {
                     Response resp = createSchema(nCols, mConnections.remove());
+                    resp.setClientSession(clieSession);
                     return resp;
                 }));
                 break;
