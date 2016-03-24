@@ -24,11 +24,11 @@ public class MbClient {
         while (!channel.finishConnect()) {
 //             System.out.println("still connecting");
         }
-        ByteBuffer buffer = ServerCmd.encodeCmd(ServerCmd.ServerCmdType.POPULATE, 1L, 10L);
-
-        while (buffer.hasRemaining()) {
-            channel.write(buffer);
-        }
+//        ByteBuffer buffer = ServerCmd.encodeCmd(ServerCmd.ServerCmdType.POPULATE, 1L, 10L);
+//
+//        while (buffer.hasRemaining()) {
+//            channel.write(buffer);
+//        }
 
         while (true) {
             // see if any message has been received
@@ -44,10 +44,10 @@ public class MbClient {
 
             if (message.length() > 0) {
                 System.out.println(message);
-                buffer = ServerCmd.encodeCmd(ServerCmd.ServerCmdType.DISCONNECT, null);
-                while (buffer.hasRemaining()) {
-                    channel.write(buffer);
-                }
+//                buffer = ServerCmd.encodeCmd(ServerCmd.ServerCmdType.DISCONNECT, null);
+//                while (buffer.hasRemaining()) {
+//                    channel.write(buffer);
+//                }
                 break;
             }
 

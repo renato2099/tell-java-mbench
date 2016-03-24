@@ -23,7 +23,7 @@ public abstract class MbServer {
     // server threads
     private ExecutorService service;
     private Queue<Future<Response>> futures;
-//    private Connection mConnection;
+    //    private Connection mConnection;
     private Queue<Connection> mConnections;
 
     // nio
@@ -86,7 +86,6 @@ public abstract class MbServer {
         while (!futures.isEmpty()) {
             Future<Response> future = futures.poll();
             Response resp = future.get();
-            // TODO fix client response encoding
             resp.getClientSession().writeResponse(resp.getResults());
             // give back connection to conn-pool
             mConnections.add(resp.getConnection());
@@ -129,8 +128,18 @@ public abstract class MbServer {
                 }));
                 break;
             case Q2:
+                futures.add(service.submit(() -> {
+                    long responseTime = 0;
+                    Response resp = new Response(new Object[]{false, "Q2 is not implemented", responseTime});
+                    return resp;
+                }));
                 break;
             case Q3:
+                futures.add(service.submit(() -> {
+                    long responseTime = 0;
+                    Response resp = new Response(new Object[]{false, "Q3 is not implemented", responseTime});
+                    return resp;
+                }));
                 break;
             case DISCONNECT:
                 clieSession.disconnect();
@@ -145,7 +154,7 @@ public abstract class MbServer {
         long numRecords = tx.query1();
         tx.commit();
         long responseTime = System.nanoTime() - t0;
-        Response resp = new Response();
+        Response resp = new Response(new Object[]{true, "", responseTime});
         resp.setConnection(mConnection);
         resp.setResult(responseTime, 0);
         return resp;
@@ -219,9 +228,14 @@ public abstract class MbServer {
         tx.commit();
 
         long responseTime = System.nanoTime() - t0;
-        Response resp = new Response();
+        // TODO: handle error case correctly (now we assume everything went fine)
+        boolean success = true;
+        String errorMsg = "";
+        // TODO: return the correct keys here (baseInsertKey is the biggest key currently in the database for the
+        // TODO: corresponding client-id and baseDeleteKey ist the smallest key currently present)
+        long baseInsertKey = 0, baseDeleteKey = 0;
+        Response resp = new Response(new Object[]{success, errorMsg, baseInsertKey, baseDeleteKey, responseTime});
         resp.setConnection(mConnection);
-        resp.setResult(responseTime, 0);
         return resp;
     }
 
@@ -240,16 +254,18 @@ public abstract class MbServer {
         }
         tx.commit();
         long responseTime = System.nanoTime() - t0;
-        Response resp = new Response();
+        // TODO: handle error case correctly (now we assume everything went fine)
+        boolean success = true;
+        String errorMsg = "";
+        Response resp = new Response(new Object[]{success, errorMsg, responseTime});
         resp.setConnection(mConnection);
-        resp.setResult(responseTime, 0);
         return resp;
-
     }
 
     public Response createSchema(int nCols, Connection mConnection) {
         mConnection.createSchema(nCols);
-        Response resp = new Response();
+        Response resp = new Response(new Object[]{true, ""});
+        ;
         resp.setConnection(mConnection);
         return resp;
     }
