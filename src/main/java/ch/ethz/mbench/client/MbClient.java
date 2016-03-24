@@ -5,6 +5,7 @@ import ch.ethz.mbench.server.ServerCmd;
 import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.nio.ByteBuffer;
+import java.nio.ByteOrder;
 import java.nio.channels.SocketChannel;
 import java.nio.charset.Charset;
 
@@ -22,13 +23,19 @@ public class MbClient {
         channel.connect(new InetSocketAddress("127.0.0.1", port));
 
         while (!channel.finishConnect()) {
-//             System.out.println("still connecting");
+             System.out.print(".");
         }
-//        ByteBuffer buffer = ServerCmd.encodeCmd(ServerCmd.ServerCmdType.POPULATE, 1L, 10L);
+        ByteBuffer buffer = ByteBuffer.allocate(ServerCmd.CMD_SIZE);
+
+        buffer.order(ByteOrder.nativeOrder());
+        buffer.putLong(16);
+        buffer.putInt(1);
+        buffer.putInt(3); // scaling factor
+
 //
-//        while (buffer.hasRemaining()) {
-//            channel.write(buffer);
-//        }
+        while (buffer.hasRemaining()) {
+            channel.write(buffer);
+        }
 
         while (true) {
             // see if any message has been received
