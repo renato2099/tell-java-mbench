@@ -16,7 +16,7 @@ public class ClientSession {
     private SelectionKey selectionKey;
     private SocketChannel channel;
 
-    private static byte zeroByte = 0, oneByte = 1;
+
 
     public ClientSession(SelectionKey readKey, SocketChannel acceptedChannel) {
         this.selectionKey = readKey;
@@ -83,7 +83,7 @@ public class ClientSession {
             for (Object o: results) {
                 if (o instanceof Boolean) {
                     Boolean b = (Boolean) o;
-                    getWriteBuffer().put(b ? oneByte : zeroByte);
+                    getWriteBuffer().put((byte)(b ? 1 : 0));
                 } else if (o instanceof Byte) {
                     getWriteBuffer().put((Byte) o);
                 } else if (o instanceof Short) {
@@ -104,6 +104,10 @@ public class ClientSession {
                     throw new RuntimeException("no known object serialization method for object " + o.toString());
                 }
             }
+            // write it to the channel
+            while(getWriteBuffer().hasRemaining())
+                this.channel.write(getWriteBuffer());
+
         } catch (IOException e) {
             e.printStackTrace();
         }
