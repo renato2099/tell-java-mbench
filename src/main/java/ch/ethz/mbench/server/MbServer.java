@@ -243,23 +243,23 @@ public abstract class MbServer {
 
     public Response populate(long start, long end, Connection mConnection) {
         Transaction tx = mConnection.startTx();
-        // TODO Fix this
-        start = 0;
-        end = 10;
         Map<Long, Tuple> inserts = new HashMap<>();
+        long cntSuccess = 0;
         for (long i = start; i < end; ++i) {
-            inserts.put(start, Tuple.createInsert(nCols));
+            inserts.put(i, Tuple.createInsert(nCols));
         }
         long t0 = System.nanoTime();
         for (Map.Entry<Long, Tuple> ins : inserts.entrySet()) {
-            tx.insert(ins.getKey(), ins.getValue());
+            if (tx.insert(ins.getKey(), ins.getValue()))
+                cntSuccess ++;
         }
-        tx.commit();
+        boolean commitRes = tx.commit();
         long responseTime = System.nanoTime() - t0;
-        // TODO: handle error case correctly (now we assume everything went fine)
-        boolean success = true;
-        String errorMsg = "";
-        Response resp = new Response(new Object[]{success, errorMsg, responseTime});
+        boolean success = commitRes & (end - start == cntSuccess);
+
+        StringBuilder errorMsg = new StringBuilder();
+        errorMsg.append("suc=").append(cntSuccess);
+        Response resp = new Response(new Object[]{success, errorMsg.toString(), responseTime});
         resp.setConnection(mConnection);
         return resp;
     }
@@ -267,7 +267,6 @@ public abstract class MbServer {
     public Response createSchema(int nCols, Connection mConnection) {
         mConnection.createSchema(nCols);
         Response resp = new Response(new Object[]{true, ""});
-        ;
         resp.setConnection(mConnection);
         return resp;
     }
@@ -287,15 +286,15 @@ public abstract class MbServer {
      * Interface to what transactions actually do
      */
     public interface Transaction {
-        void insert(Long key, Tuple value);
+        boolean insert(Long key, Tuple value);
 
-        void commit();
+        boolean commit();
 
-        void update(Long key, Tuple value);
+        boolean update(Long key, Tuple value);
 
-        void remove(Long key);
+        boolean remove(Long key);
 
-        void get(Long key);
+        boolean get(Long key);
 
         long query1();
     }

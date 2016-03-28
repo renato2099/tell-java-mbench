@@ -56,7 +56,7 @@ public class CassandraMbServer extends MbServer {
             cluster.getConfiguration().getSocketOptions().setConnectTimeoutMillis(HIGHER_TIMEOUT).setReadTimeoutMillis(HIGHER_TIMEOUT);
             Metadata md = cluster.getMetadata();
             Log.info(String.format("Connected to: %s\n", md.getClusterName()));
-            for ( Host h : md.getAllHosts() ) {
+            for (Host h : md.getAllHosts()) {
                 Log.debug(String.format("Datatacenter: %s; Host: %s; Rack: %s\n",
                         h.getDatacenter(), h.getAddress(), h.getRack()));
             }
@@ -88,21 +88,26 @@ public class CassandraMbServer extends MbServer {
             sb.append("CREATE TABLE ").append(CONTAINER).append(".").append(TABLE_NAME);
             sb.append("(id bigint,");
             for (int i = 0; i < nCols; i++) {
-                sb.append("A").append(i%10).append(" ");
+                sb.append("A").append(i % 10).append(" ");
                 switch (i) {
-                    case 0:case 7:
+                    case 0:
+                    case 7:
                         sb.append("double,");
                         break;
-                    case 1:case 2:
+                    case 1:
+                    case 2:
                         sb.append("int,");
                         break;
-                    case 3:case 4:
+                    case 3:
+                    case 4:
                         sb.append("int,");
                         break;
-                    case 5:case 6:
+                    case 5:
+                    case 6:
                         sb.append("bigint,");
                         break;
-                    case 8:case 9:
+                    case 8:
+                    case 9:
                         sb.append("varchar,");
                         break;
                 }
@@ -134,52 +139,93 @@ public class CassandraMbServer extends MbServer {
         }
 
         @Override
-        public void insert(Long key, Tuple value) {
-            RegularStatement insert = QueryBuilder.insertInto(TABLE_NAME).values(
-                    value.getFieldNames(),
-                    new Object[] { key, value.getFieldValues()});
-            // is this the right way to set consistency level for Batch?
-            insert.setConsistencyLevel(ConsistencyLevel.ANY);
-            batch.add(insert);
-        }
-
-        @Override
-        public void commit() {
-            if (batch != null) {
-                session.execute(batch);
-                session.close();
+        public boolean insert(Long key, Tuple value) {
+            boolean result = false;
+            try {
+                // setting field names up
+                String fieldNames[] = new String[1 + value.getFieldNames().length];
+                fieldNames[0] = "id";
+                System.arraycopy(value.getFieldNames(), 0, fieldNames, 1, value.getFieldNames().length);
+                // setting values up
+                Object fieldValues[] = new Object[1 + value.getFieldValues().length];
+                fieldValues[0] = key;
+                System.arraycopy(value.getFieldValues(), 0, fieldValues, 1, value.getFieldValues().length);
+                // preparing statement
+                RegularStatement insert = QueryBuilder.insertInto(TABLE_NAME).values(fieldNames, fieldValues);
+                // is this the right way to set consistency level for Batch?
+                insert.setConsistencyLevel(ConsistencyLevel.ANY);
+                batch.add(insert);
+                result = true;
+            } catch (Exception e) {
+                e.printStackTrace();
             }
-
-            else
-                throw new RuntimeException("No operations to be committed!");
+            return result;
         }
 
         @Override
-        public void update(Long key, Tuple value) {
-            Update update = QueryBuilder.update(CONTAINER, TABLE_NAME);
-            for (int i = 0; i < value.getNumFields(); i++) {
-                if (value.getFieldValues() != null)
-                    update.with(set(value.getFieldNames()[i], value.getFieldValues()[i]));
+        public boolean commit() {
+            boolean result = false;
+            try {
+                if (batch != null) {
+                    session.execute(batch);
+                    session.close();
+                    result = true;
+                } else
+                    throw new RuntimeException("No operations to be committed!");
+            } catch (Exception e) {
+                e.printStackTrace();
             }
-            update.where(eq("id", key));
-            batch.add(update);
+            return result;
         }
 
         @Override
-        public void remove(Long key) {
-            Delete.Where delete = QueryBuilder.delete().
-                    from(CONTAINER, TABLE_NAME).where(eq("id", key));
-            delete.setConsistencyLevel(ConsistencyLevel.ANY);
-            batch.add(delete);
+        public boolean update(Long key, Tuple value) {
+            boolean result = false;
+            try {
+                Update update = QueryBuilder.update(CONTAINER, TABLE_NAME);
+
+                for (int i = 0; i < value.getNumFields(); i++) {
+                    if (value.getFieldValues() != null)
+                        update.with(set(value.getFieldNames()[i], value.getFieldValues()[i]));
+                }
+                update.where(eq("id", key));
+                batch.add(update);
+                result = true;
+            } catch (Exception e) {
+                e.printStackTrace();
+            }
+            return result;
         }
 
         @Override
-        public void get(Long key) {
-            RegularStatement get = QueryBuilder.select()
-                    .all()
-                    .from(CONTAINER, TABLE_NAME)
-                    .where(eq("id", key));
-            batch.add(get);
+        public boolean remove(Long key) {
+            boolean result = false;
+            try {
+                Delete.Where delete = QueryBuilder.delete().
+                        from(CONTAINER, TABLE_NAME).where(eq("id", key));
+                delete.setConsistencyLevel(ConsistencyLevel.ANY);
+                batch.add(delete);
+                result = true;
+            } catch (Exception e) {
+                e.printStackTrace();
+            }
+            return result;
+        }
+
+        @Override
+        public boolean get(Long key) {
+            boolean result = false;
+            try {
+                RegularStatement get = QueryBuilder.select()
+                        .all()
+                        .from(CONTAINER, TABLE_NAME)
+                        .where(eq("id", key));
+                batch.add(get);
+                result = true;
+            } catch (Exception e) {
+                e.printStackTrace();
+            }
+            return result;
         }
 
         @Override

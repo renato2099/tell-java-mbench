@@ -97,7 +97,8 @@ public class HbaseMbServer extends MbServer {
         }
 
         @Override
-        public void insert(Long key, Tuple value) {
+        public boolean insert(Long key, Tuple value) {
+            boolean result = false;
             try {
                 Put put = new Put(Bytes.toBytes(key));
                 for (int i = 0; i < value.getNumFields(); i++) {
@@ -158,45 +159,56 @@ public class HbaseMbServer extends MbServer {
                         }
                 }
                 hTable.put(put);
+                result = true;
             } catch (IOException e) {
                 e.printStackTrace();
             }
+            return result;
         }
 
         @Override
-        public void commit() {
+        public boolean commit() {
+            boolean result = false;
             try {
                 // commit batch
                 // hTable.flushCommits(); close calls flushcommits
                 hTable.close();
+                result = true;
             } catch (IOException e) {
                 e.printStackTrace();
             }
+            return result;
         }
 
         @Override
-        public void update(Long key, Tuple value) {
-            insert(key, value);
+        public boolean update(Long key, Tuple value) {
+            return insert(key, value);
         }
 
         @Override
-        public void remove(Long key) {
+        public boolean remove(Long key) {
+            boolean result = false;
             try {
                 Delete delete = new Delete(Bytes.toBytes(key));
                 hTable.delete(delete);
+                result = true;
             } catch (IOException e) {
                 e.printStackTrace();
             }
+            return result;
         }
 
         @Override
-        public void get(Long key) {
+        public boolean get(Long key) {
+            boolean result = false;
             try {
                 Get get = new Get(Bytes.toBytes(key));
                 byte[] row = hTable.get(get).getRow();
+                result = true;
             } catch (IOException e) {
                 e.printStackTrace();
             }
+            return result;
         }
 
         @Override

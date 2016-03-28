@@ -16,8 +16,6 @@ public class ClientSession {
     private SelectionKey selectionKey;
     private SocketChannel channel;
 
-
-
     public ClientSession(SelectionKey readKey, SocketChannel acceptedChannel) {
         this.selectionKey = readKey;
         this.channel = acceptedChannel;
@@ -41,13 +39,14 @@ public class ClientSession {
 
     public ServerCmd readCmd() {
         int bytesRead = -1;
+        getReadBuffer().clear();
 
         try {
-            bytesRead = channel.read((ByteBuffer) readBuffer.clear());
+            bytesRead = channel.read(getReadBuffer());
         } catch (Throwable t) {
             // ignoring exception, if nothing is read we'll disconnect
         }
-        readBuffer.flip();
+        getReadBuffer().flip();
         if (bytesRead == -1) disconnect();
         if (bytesRead < 0) return null;
         ServerCmd serverCmd = ServerCmd.decodeCmd(getReadBuffer());
@@ -55,31 +54,10 @@ public class ClientSession {
         return serverCmd;
     }
 
-    private long getResultBufferSize(Object[] results) throws IOException {
-        long result = 8;    // 8 bytes for encoding the total size
-        for (Object o: results) {
-            if (o instanceof Boolean || o instanceof Byte) {
-                result += 1;
-            } else if (o instanceof Short) {
-                result += 2;
-            } else if (o instanceof Integer || o instanceof Float) {
-                result += 4;
-            } else if (o instanceof Long || o instanceof Double) {
-                result += 8;
-            } else if (o instanceof String) {
-                result += 4;    // encode string length
-                result += (((String) o).getBytes("UTF-8").length);
-            } else {
-                throw new RuntimeException("no known object serialization method for object " + o.toString());
-            }
-        }
-        return result;
-    }
-
     public void writeResponse(Object[] results) {
         try {
             getWriteBuffer().clear();
-            getWriteBuffer().putLong(getResultBufferSize(results));
+            getWriteBuffer().putLong(ServerCmd.getResultBufferSize(results));
             for (Object o: results) {
                 if (o instanceof Boolean) {
                     Boolean b = (Boolean) o;
@@ -101,20 +79,16 @@ public class ClientSession {
                     getWriteBuffer().putInt(utf8Arr.length);
                     getWriteBuffer().put(utf8Arr);
                 } else {
-                    throw new RuntimeException("no known object serialization method for object " + o.toString());
+                    throw new RuntimeException("Not able to serialize type " + o.getClass().getSimpleName());
                 }
             }
             // write it to the channel
+            getWriteBuffer().flip();
             while(getWriteBuffer().hasRemaining())
-                this.channel.write(getWriteBuffer());
-
+                getChannel().write(getWriteBuffer());
         } catch (IOException e) {
             e.printStackTrace();
         }
-    }
-
-    public void setChannel(SocketChannel c) {
-        this.channel = c;
     }
 
     public SocketChannel getChannel() {
