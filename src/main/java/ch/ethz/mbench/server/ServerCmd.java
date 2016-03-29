@@ -27,7 +27,7 @@ public class ServerCmd {
 
     private ServerCmdType type;
     private Object args[];
-    public static int CMD_SIZE = 68;
+    public static int CMD_SIZE = 128;
 
     public ServerCmd(ServerCmdType t, Object a[]) {
         this.type = t;

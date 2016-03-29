@@ -112,7 +112,7 @@ public class CassandraMbServer extends MbServer {
                         break;
                 }
             }
-//            sb.append("PRIMARY KEY ((id), A3)");
+//            sb.append("PRIMARY KEY ((id), A0)");
             sb.append("PRIMARY KEY (id)");
             sb.append(");");
 
@@ -216,11 +216,11 @@ public class CassandraMbServer extends MbServer {
         public boolean get(Long key) {
             boolean result = false;
             try {
-                RegularStatement get = QueryBuilder.select()
+                Select.Where get = QueryBuilder.select()
                         .all()
                         .from(CONTAINER, TABLE_NAME)
                         .where(eq("id", key));
-                batch.add(get);
+                //batch.add(get);
                 result = true;
             } catch (Exception e) {
                 e.printStackTrace();
