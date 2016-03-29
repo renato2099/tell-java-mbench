@@ -10,12 +10,9 @@ import java.nio.channels.SocketChannel;
 import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
 import java.util.LinkedList;
-import java.util.PriorityQueue;
 import java.util.Queue;
 
-import static ch.ethz.mbench.server.ServerCmd.ServerCmdType.BATCH_OP;
-import static ch.ethz.mbench.server.ServerCmd.ServerCmdType.CREATE_SCHEMA;
-import static ch.ethz.mbench.server.ServerCmd.ServerCmdType.POPULATE;
+import static ch.ethz.mbench.server.ServerCmd.ServerCmdType.*;
 
 /**
  */
@@ -39,6 +36,8 @@ public class MbClient {
         cmdQueue.add(new ServerCmd(CREATE_SCHEMA, new Object[]{CREATE_SCHEMA.getVal(), 3}));
         cmdQueue.add(new ServerCmd(POPULATE, new Object[]{POPULATE.getVal(), 0L, 10L}));
         cmdQueue.add(new ServerCmd(BATCH_OP, new Object[]{BATCH_OP.getVal(), 10, 0.4, 0.3, 0.3, 1, 1L, 10L, 0L}));
+        cmdQueue.add(new ServerCmd(Q1, new Object[]{Q1.getVal()}));
+//        cmdQueue.add(new ServerCmd(DISCONNECT, new Object[]{}));
 
         while (!cmdQueue.isEmpty()) {
             ServerCmd cmd = cmdQueue.poll();
@@ -80,20 +79,13 @@ public class MbClient {
                     case CREATE_SCHEMA:
                         break;
                     case POPULATE:
-                        strSz = bufferA.getInt();
-                        byteStr = new byte[strSz];
-                        bufferA.get(byteStr, 0, strSz);
-                        System.out.println("\t" + new String(byteStr, StandardCharsets.UTF_8));
-                        System.out.println(String.format("\tRT=%.6f", bufferA.getLong()/1000000.0));
-                        break;
                     case BATCH_OP:
+                    case Q1:
                         strSz = bufferA.getInt();
                         byteStr = new byte[strSz];
                         bufferA.get(byteStr, 0, strSz);
                         System.out.println("\t" + new String(byteStr, StandardCharsets.UTF_8));
                         System.out.println(String.format("\tRT=%.6f", bufferA.getLong()/1000000.0));
-                        break;
-                    case Q1:
                         break;
                     case Q2:
                         break;

@@ -155,25 +155,14 @@ public abstract class MbServer {
         long t0 = System.nanoTime();
 
         Transaction tx = mConnection.startTx();
-        long numRecords = tx.query1();
+        long nTuples = tx.query1();
         tx.commit();
         long responseTime = System.nanoTime() - t0;
-        Response resp = new Response(new Object[]{true, "", responseTime});
+        Response resp = new Response(new Object[]{true, "nTup=" + nTuples, responseTime});
         resp.setConnection(mConnection);
         resp.setResult(responseTime, 0);
         return resp;
     }
-
-    /*
-    bb.getInt(),    // 0: number of Ops
-                        bb.getDouble(), // 1: insertion probability
-                        bb.getDouble(), // 2: deletion probability
-                        bb.getDouble(), // 3: update probability
-                        bb.getInt(),    // 4: client-id
-                        bb.getLong(),   // 5: number of clients
-                        bb.getLong(),   // 6: base insert key
-                        bb.getLong(),   // 7: base delete key
-     */
 
     private Response doBatchOp(int nOps, double iProb, double dProb, double uProb, int clientId,
                                long nClients, long baseInsKey, long baseDelKey, Connection mConnection) {

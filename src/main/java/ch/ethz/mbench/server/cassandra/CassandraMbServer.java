@@ -230,10 +230,20 @@ public class CassandraMbServer extends MbServer {
 
         @Override
         public long query1() {
-            Select count = QueryBuilder.select().column("a0").countAll().from(CONTAINER, TABLE_NAME);
-            ResultSet rs = session.execute(count);
+            Statement stmt = new SimpleStatement(String.format("select max(a0) from %s.%s",CONTAINER, TABLE_NAME));
+            stmt.setConsistencyLevel(ConsistencyLevel.ALL);
+            ResultSet rs = session.execute(stmt);
             return rs.all().size();
         }
+//        public long query2() {
+//            double upper = Tuple.getRandomDouble(0.0, 0.6);
+//            String query = String.format("select max(a0) from %s.%s where a0 > 0 and a0 < ?",CONTAINER, TABLE_NAME);
+//            PreparedStatement stmt = session.prepare(query);
+//            stmt.bind(upper);
+//            stmt.setConsistencyLevel(ConsistencyLevel.ALL);
+//            ResultSet rs = session.execute(stmt);
+//            return rs.all().size();
+//        }
     }
 
     @Override
