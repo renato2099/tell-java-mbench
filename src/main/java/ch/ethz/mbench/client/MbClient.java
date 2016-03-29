@@ -35,17 +35,10 @@ public class MbClient {
         while (!channel.finishConnect()) {
             System.out.print(".");
         }
-//        ByteBuffer buffer = ByteBuffer.allocate(ServerCmd.CMD_SIZE);
-//        buffer.order(ByteOrder.nativeOrder());
-//        buffer.putLong(16);
-//        buffer.putInt(1);
-//        buffer.putInt(3); // scaling factor
-//        buffer.flip();
 
-        ServerCmd createCmd = new ServerCmd(CREATE_SCHEMA, new Object[]{CREATE_SCHEMA.getVal() + 1, 3});
-        cmdQueue.add(createCmd);
-        cmdQueue.add(new ServerCmd(POPULATE, new Object[]{POPULATE.getVal() + 1, 0L, 10L}));
-//        cmdQueue.add(new ServerCmd(BATCH_OP, new Object[]{0L, 10L}));
+        cmdQueue.add(new ServerCmd(CREATE_SCHEMA, new Object[]{CREATE_SCHEMA.getVal(), 3}));
+        cmdQueue.add(new ServerCmd(POPULATE, new Object[]{POPULATE.getVal(), 0L, 10L}));
+        cmdQueue.add(new ServerCmd(BATCH_OP, new Object[]{BATCH_OP.getVal(), 10, 0.4, 0.3, 0.3, 1, 1L, 10L, 0L}));
 
         while (!cmdQueue.isEmpty()) {
             ServerCmd cmd = cmdQueue.poll();
@@ -75,24 +68,30 @@ public class MbClient {
             bufferA.clear();
             bufferA.order(ByteOrder.nativeOrder());
             int count = 0;
-            String message = "";
+            int strSz = 0;
+            byte byteStr[];
             while ((count = channel.read(bufferA)) > 0) {
                 // flip the buffer to start reading
                 bufferA.flip();
-                System.out.println("Server response size:" + bufferA.getLong());
-                System.out.println("Bytes read from server:" + count);
+                System.out.println("\tServer response size:" + bufferA.getLong());
+                System.out.println("\tBytes read from server:" + count);
                 result = bufferA.get() == 1 ? true : false;
                 switch (cmd.getType()) {
                     case CREATE_SCHEMA:
                         break;
                     case POPULATE:
-                        int strSz = bufferA.getInt();
-                        StringBuilder sb = new StringBuilder();
-                        byte byteStr[] = new byte[strSz];
+                        strSz = bufferA.getInt();
+                        byteStr = new byte[strSz];
                         bufferA.get(byteStr, 0, strSz);
-                        System.out.println(new String(byteStr, StandardCharsets.UTF_8));
+                        System.out.println("\t" + new String(byteStr, StandardCharsets.UTF_8));
+                        System.out.println(String.format("\tRT=%.6f", bufferA.getLong()/1000000.0));
                         break;
                     case BATCH_OP:
+                        strSz = bufferA.getInt();
+                        byteStr = new byte[strSz];
+                        bufferA.get(byteStr, 0, strSz);
+                        System.out.println("\t" + new String(byteStr, StandardCharsets.UTF_8));
+                        System.out.println(String.format("\tRT=%.6f", bufferA.getLong()/1000000.0));
                         break;
                     case Q1:
                         break;
@@ -104,8 +103,6 @@ public class MbClient {
                         break;
                 }
                 read = true;
-//                message += Charset.defaultCharset().decode(bufferA);
-//                System.out.println("Got from server");
             }
 
             if (read)

@@ -112,8 +112,8 @@ public class CassandraMbServer extends MbServer {
                         break;
                 }
             }
-            sb.append("PRIMARY KEY ((id), A3)");
-//            sb.append("PRIMARY KEY (id)");
+//            sb.append("PRIMARY KEY ((id), A3)");
+            sb.append("PRIMARY KEY (id)");
             sb.append(");");
 
             try {
@@ -230,7 +230,7 @@ public class CassandraMbServer extends MbServer {
 
         @Override
         public long query1() {
-            Select count = QueryBuilder.select().column("A3").countAll().from(CONTAINER, TABLE_NAME);
+            Select count = QueryBuilder.select().column("a0").countAll().from(CONTAINER, TABLE_NAME);
             ResultSet rs = session.execute(count);
             return rs.all().size();
         }

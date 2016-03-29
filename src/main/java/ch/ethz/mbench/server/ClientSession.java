@@ -15,10 +15,12 @@ public class ClientSession {
     private ByteBuffer writeBuffer;
     private SelectionKey selectionKey;
     private SocketChannel channel;
+    private long clientId;
 
-    public ClientSession(SelectionKey readKey, SocketChannel acceptedChannel) {
+    public ClientSession(SelectionKey readKey, SocketChannel acceptedChannel, long cId) {
         this.selectionKey = readKey;
         this.channel = acceptedChannel;
+        this.clientId = cId;
         readBuffer = ByteBuffer.allocate(ServerCmd.CMD_SIZE);
         readBuffer.order(ByteOrder.nativeOrder());
         writeBuffer = ByteBuffer.allocate(ServerCmd.CMD_SIZE);
@@ -27,6 +29,7 @@ public class ClientSession {
 
     public void disconnect() {
         MbServer.clientMap.remove(selectionKey);
+        MbServer.clientIds --;
         try {
             if (selectionKey != null) selectionKey.cancel();
             if (channel == null) return;
@@ -103,11 +106,7 @@ public class ClientSession {
         return writeBuffer;
     }
 
-    public void setSelectionKey(SelectionKey selectionKey) {
-        this.selectionKey = selectionKey;
-    }
-
-    public SelectionKey getSelectionKey() {
-        return selectionKey;
+    public long getClientId() {
+        return clientId;
     }
 }

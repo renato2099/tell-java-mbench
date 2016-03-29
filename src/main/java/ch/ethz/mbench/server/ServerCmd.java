@@ -20,14 +20,14 @@ public class ServerCmd {
         public static ServerCmdType fromInt(int v) {
             return ServerCmdType.values()[v - 1]; // CAUTION: this only works because numbers are consecutive
         }
-        public short getVal() {
-            return val;
+        public int getVal() {
+            return val + 1;
         }
     }
 
     private ServerCmdType type;
     private Object args[];
-    public static int CMD_SIZE = 64;
+    public static int CMD_SIZE = 68;
 
     public ServerCmd(ServerCmdType t, Object a[]) {
         this.type = t;

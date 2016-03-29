@@ -24,7 +24,7 @@ public class Tuple {
             nTuple.fieldNames[i] = "A" + (i % 10);
             switch (i) {
                 case 0:
-                    nTuple.fieldValues[i] = getRandomDouble(0.0, 0.1);
+                    nTuple.fieldValues[i] = getRandomDouble(0.0, 1.0);
                     break;
                 case 1:
                     nTuple.fieldValues[i] = getRandomInt();
@@ -33,10 +33,10 @@ public class Tuple {
                     nTuple.fieldValues[i] = getRandomInt(0, 10000);
                     break;
                 case 3:
-                    nTuple.fieldValues[i] = getRandomShort(0, 1);
+                    nTuple.fieldValues[i] = getRandomShort(0, 2);
                     break;
                 case 4:
-                    nTuple.fieldValues[i] = getRandomShort(0, 255);
+                    nTuple.fieldValues[i] = getRandomShort(0, 256);
                     break;
                 case 5:
                     nTuple.fieldValues[i] = getRandomLong(Long.MIN_VALUE, 0);
@@ -113,7 +113,7 @@ public class Tuple {
         return fieldValues;
     }
 
-    public static long rndKey(long baseInsKey, long baseDelKey, int nClients, int clientId) {
+    public static long rndKey(long baseInsKey, long baseDelKey, long nClients, long clientId) {
         long k = getRandomLong(baseDelKey, baseInsKey);
         k = (k / nClients) * nClients;
         k += clientId;

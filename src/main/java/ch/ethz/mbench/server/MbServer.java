@@ -32,6 +32,7 @@ public abstract class MbServer {
     private ServerSocketChannel serverChannel;
     public static Map<SelectionKey, ClientSession> clientMap = new HashMap<>();
     public static Logger Log = Logger.getLogger(MbServer.class);
+    public static long clientIds;
 
     public void initialize() {
         service = Executors.newFixedThreadPool(numAsioThreads);
@@ -79,7 +80,7 @@ public abstract class MbServer {
                 if (acceptedChannel == null) continue;
                 acceptedChannel.configureBlocking(false);
                 SelectionKey readKey = acceptedChannel.register(selector, SelectionKey.OP_READ);
-                clientMap.put(readKey, new ClientSession(readKey, acceptedChannel));
+                clientMap.put(readKey, new ClientSession(readKey, acceptedChannel, ++clientIds));
                 Log.info("New client ip=" + acceptedChannel.getRemoteAddress() + ", nClients=" + clientMap.size());
             }
         }
@@ -115,9 +116,8 @@ public abstract class MbServer {
             case BATCH_OP:
                 futures.add(service.submit(() -> {
                     Object[] args = scm.getArgs();
-                    Response resp = doBatchOp((double) args[0], (double) args[1], (double) args[2],
-                            (int) args[3], (long) args[4], (long) args[5], (int) args[6], (int) args[7],
-                            mConnections.remove());
+                    Response resp = doBatchOp((int) args[0], (double) args[1], (double) args[2], (double) args[3],
+                            (int) args[4], (long) args[5], (long) args[6], (long) args[7], mConnections.remove());
                     resp.setClientSession(clieSession);
                     return resp;
                 }));
@@ -149,6 +149,8 @@ public abstract class MbServer {
         }
     }
 
+
+
     private Response query1(Connection mConnection) {
         long t0 = System.nanoTime();
 
@@ -162,9 +164,19 @@ public abstract class MbServer {
         return resp;
     }
 
-    protected Response doBatchOp(double iProb, double dProb, double uProb,
-                                 int nOps, long baseDelKey, long baseInsKey,
-                                 int clientId, int nClients, Connection mConnection) {
+    /*
+    bb.getInt(),    // 0: number of Ops
+                        bb.getDouble(), // 1: insertion probability
+                        bb.getDouble(), // 2: deletion probability
+                        bb.getDouble(), // 3: update probability
+                        bb.getInt(),    // 4: client-id
+                        bb.getLong(),   // 5: number of clients
+                        bb.getLong(),   // 6: base insert key
+                        bb.getLong(),   // 7: base delete key
+     */
+
+    private Response doBatchOp(int nOps, double iProb, double dProb, double uProb, int clientId,
+                               long nClients, long baseInsKey, long baseDelKey, Connection mConnection) {
         double gProb = 1.0 - iProb - dProb - uProb;
         if (gProb < 0.0) {
             throw new RuntimeException("Probabilities sum up to negative number");
@@ -208,35 +220,37 @@ public abstract class MbServer {
         Iterator<Long> getIter = getKeys.iterator();
 
         long t0 = System.nanoTime();
+        int sucOps = 0;
 
         Transaction tx = mConnection.startTx();
         for (int i = 0; i < nOps; i++) {
             if (ops[i] < iProb) {
                 //do insert
                 Map.Entry<Long, Tuple> nextIns = insIter.next();
-                tx.insert(nextIns.getKey(), nextIns.getValue());
+                if (tx.insert(nextIns.getKey(), nextIns.getValue()))
+                    sucOps ++;
             } else if (ops[i] < iProb + uProb) {
                 // do update
                 Map.Entry<Long, Tuple> nextUpd = updIter.next();
-                tx.update(nextUpd.getKey(), nextUpd.getValue());
+                if (tx.update(nextUpd.getKey(), nextUpd.getValue()))
+                    sucOps ++;
             } else if (ops[i] < iProb + uProb + dProb) {
                 // do delete
-                tx.remove(delIter.next());
+                if (tx.remove(delIter.next()))
+                    sucOps ++;
             } else {
                 // do get
-                tx.get(getIter.next());
+                if (tx.get(getIter.next()))
+                    sucOps ++;
             }
         }
-        tx.commit();
+        boolean commitRes = tx.commit();
 
         long responseTime = System.nanoTime() - t0;
-        // TODO: handle error case correctly (now we assume everything went fine)
-        boolean success = true;
-        String errorMsg = "";
-        // TODO: return the correct keys here (baseInsertKey is the biggest key currently in the database for the
-        // TODO: corresponding client-id and baseDeleteKey ist the smallest key currently present)
-        long baseInsertKey = 0, baseDeleteKey = 0;
-        Response resp = new Response(new Object[]{success, errorMsg, baseInsertKey, baseDeleteKey, responseTime});
+        boolean success = commitRes & (nOps == sucOps);
+        StringBuilder errorMsg = new StringBuilder();
+        errorMsg.append("suc=").append(sucOps);
+        Response resp = new Response(new Object[]{success, errorMsg.toString(), baseInsKey, baseDelKey, responseTime});
         resp.setConnection(mConnection);
         return resp;
     }
@@ -244,21 +258,21 @@ public abstract class MbServer {
     public Response populate(long start, long end, Connection mConnection) {
         Transaction tx = mConnection.startTx();
         Map<Long, Tuple> inserts = new HashMap<>();
-        long cntSuccess = 0;
+        long sucOps = 0;
         for (long i = start; i < end; ++i) {
             inserts.put(i, Tuple.createInsert(nCols));
         }
         long t0 = System.nanoTime();
         for (Map.Entry<Long, Tuple> ins : inserts.entrySet()) {
             if (tx.insert(ins.getKey(), ins.getValue()))
-                cntSuccess ++;
+                sucOps ++;
         }
         boolean commitRes = tx.commit();
         long responseTime = System.nanoTime() - t0;
-        boolean success = commitRes & (end - start == cntSuccess);
+        boolean success = commitRes & (end - start == sucOps);
 
         StringBuilder errorMsg = new StringBuilder();
-        errorMsg.append("suc=").append(cntSuccess);
+        errorMsg.append("suc=").append(sucOps);
         Response resp = new Response(new Object[]{success, errorMsg.toString(), responseTime});
         resp.setConnection(mConnection);
         return resp;
