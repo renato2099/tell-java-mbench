@@ -25,7 +25,7 @@ public class CassandraMbServer extends MbServer {
     private static final String REPL_FACTOR = "1";
     public static final String TABLE_NAME = "maintable";
     // cassandra ring properties
-    private String clNode;
+    private String[] clNode;
     private String nodePort;
     public static Logger Log = Logger.getLogger(CassandraMbServer.class);
 
@@ -49,12 +49,16 @@ public class CassandraMbServer extends MbServer {
      */
     public static class CassandraConnection implements Connection {
 
-        private Cluster cluster;
+        private static Cluster cluster;
+        private final Session session;
 
-        CassandraConnection(String node, String port) {
+        CassandraConnection(String nodes[], String port) {
             cluster = Cluster.builder().withPort(Integer.parseInt(port))
-                    .addContactPoint(node).build();
+                    .addContactPoints(nodes).build();
             cluster.getConfiguration().getSocketOptions().setConnectTimeoutMillis(HIGHER_TIMEOUT).setReadTimeoutMillis(HIGHER_TIMEOUT);
+
+            session = cluster.connect(CONTAINER);
+
             Metadata md = cluster.getMetadata();
             Log.info(String.format("Connected to: %s\n", md.getClusterName()));
             for (Host h : md.getAllHosts()) {
@@ -65,7 +69,7 @@ public class CassandraMbServer extends MbServer {
 
         @Override
         public Transaction startTx() {
-            return new CassandraTransaction(cluster);
+            return new CassandraTransaction(session);
         }
 
         @Override
@@ -131,14 +135,15 @@ public class CassandraMbServer extends MbServer {
      * Handles operations in Cassandra
      */
     public static class CassandraTransaction implements Transaction {
-        private final Session session;
+        private Session session;
         private Batch batch;
         private Vector<RegularStatement> gets;
 
-        CassandraTransaction(Cluster cluster) {
-            session = cluster.connect(CONTAINER);
+        CassandraTransaction(Session sess) {
+            session = sess;
             batch = QueryBuilder.batch();
             gets = new Vector();
+
         }
 
         @Override
@@ -167,24 +172,21 @@ public class CassandraMbServer extends MbServer {
 
         @Override
         public boolean commit() {
-            boolean batchRes = false;
-            boolean getRes = false;
+            boolean getRes = true;
             try {
                 if (gets != null && !gets.isEmpty()) {
                     for (RegularStatement get : gets) {
                         session.execute(get);
                     }
-                    getRes = true;
                 }
                 if (batch != null && batch.hasValues()) {
                     session.execute(batch);
-                    batchRes = true;
                 }
-                session.close();
             } catch (Exception e) {
                 e.printStackTrace();
+                getRes = false;
             }
-            return batchRes & getRes;
+            return getRes;
         }
 
         @Override
@@ -253,7 +255,7 @@ public class CassandraMbServer extends MbServer {
         Options options = getCmdLineOptions();
         try {
             commandLine = parser.parse(options, args);
-            clNode = commandLine.getOptionValue("cn");
+            clNode = commandLine.getOptionValues("cn");
             nodePort = commandLine.getOptionValue("np", "9042");
         } catch (ParseException exception) {
             Log.error("Parse error: ");
@@ -265,7 +267,7 @@ public class CassandraMbServer extends MbServer {
     @Override
     public Options getCmdLineOptions() {
         Options options = super.getCmdLineOptions();
-        options.addOption(Option.builder("cn").argName("cassandra-master").hasArg().required(true).desc("Cassandra node ip").build());
+        options.addOption(Option.builder("cn").argName("cassandra-contact-points").hasArg().required(true).desc("Cassandra nodes ip").build());
         options.addOption(Option.builder("np").argName("cassandra-port").hasArg().desc("Cassandra port").build());
         return options;
     }

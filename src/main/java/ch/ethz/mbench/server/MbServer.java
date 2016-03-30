@@ -1,7 +1,7 @@
 package ch.ethz.mbench.server;
 
 import org.apache.commons.cli.*;
-import org.apache.commons.collections.iterators.ObjectArrayIterator;
+import org.apache.commons.httpclient.util.IdleConnectionTimeoutThread;
 import org.apache.log4j.Logger;
 
 import java.io.IOException;
@@ -22,9 +22,7 @@ public abstract class MbServer {
     private short scaleFactor;
     // server threads
     private ExecutorService service;
-    private Queue<Future<Response>> futures;
-    //    private Connection mConnection;
-    private Queue<Connection> mConnections;
+    private List<Future<Response>> futures;
 
     // nio
     private Selector selector;
@@ -34,14 +32,26 @@ public abstract class MbServer {
     public static Logger Log = Logger.getLogger(MbServer.class);
     public static long clientIds;
 
-    public void initialize() {
-        service = Executors.newFixedThreadPool(numAsioThreads);
-        futures = new ConcurrentLinkedQueue<>();
-        mConnections = new ConcurrentLinkedQueue<>();
-        for (int i = 0; i < numAsioThreads; i++) {
-            mConnections.add(createConnection());
+    // service thread keeps its own connection
+    private class ServiceThread extends Thread {
+        private final Connection connection;
+        public ServiceThread(Runnable runnable, Connection connection) {
+            super(runnable);
+            this.connection = connection;
         }
+    }
 
+    // factory for service threads
+    private class ServiceThreadFactory implements ThreadFactory {
+        @Override
+        public Thread newThread(Runnable runnable) {
+            return new ServiceThread(runnable, createConnection());
+        }
+    }
+
+    public void initialize() {
+        service = Executors.newFixedThreadPool(numAsioThreads, new ServiceThreadFactory());
+        futures = new ArrayList<>();
     }
 
     public void run() throws IOException, ExecutionException, InterruptedException {
@@ -52,16 +62,16 @@ public abstract class MbServer {
         selector = Selector.open();
         serverKey = serverChannel.register(selector, SelectionKey.OP_ACCEPT);
 
-        Executors.newSingleThreadScheduledExecutor().scheduleAtFixedRate(() -> {
-            try {
+        try {
+            while (true)
                 loop();
-            } catch (Throwable t) {
-                t.printStackTrace();
-            }
-        }, 0, 500, TimeUnit.MILLISECONDS);
+        } catch (Throwable t) {
+            t.printStackTrace();
+        }
     }
 
     public void loop() throws Throwable {
+        // process incoming requests
         selector.selectNow();
         for (SelectionKey key : selector.selectedKeys()) {
             if (!key.isValid())
@@ -74,7 +84,7 @@ public abstract class MbServer {
                 processRequest(clieSession, key);
             }
 
-            //if (key.isAcceptable()) {
+            // handle a new client that connects
             if (key == serverKey) {
                 SocketChannel acceptedChannel = serverChannel.accept();
                 if (acceptedChannel == null) continue;
@@ -82,16 +92,23 @@ public abstract class MbServer {
                 SelectionKey readKey = acceptedChannel.register(selector, SelectionKey.OP_READ);
                 clientMap.put(readKey, new ClientSession(readKey, acceptedChannel, ++clientIds));
                 Log.info("New client ip=" + acceptedChannel.getRemoteAddress() + ", nClients=" + clientMap.size());
+                System.out.println("New client ip=" + acceptedChannel.getRemoteAddress() + ", nClients=" + clientMap.size());
             }
         }
+
+        // send results of processed requests
         selector.selectedKeys().clear();
-        while (!futures.isEmpty()) {
-            Future<Response> future = futures.poll();
-            Response resp = future.get();
-            resp.getClientSession().writeResponse(resp.getResults());
-            // give back connection to conn-pool
-            mConnections.add(resp.getConnection());
+        List<Future<Response>> nextFutures = new ArrayList<>();
+        for (Future<Response> future : futures) {
+            if (future.isDone()) {
+                Response resp = future.get();
+                resp.getClientSession().writeResponse(resp.getResults());
+            } else {
+                nextFutures.add(future);
+            }
         }
+        // this is save because access to futures are single-threaded
+        futures = nextFutures;
     }
 
     private void processRequest(ClientSession clieSession, SelectionKey key) {
@@ -100,7 +117,8 @@ public abstract class MbServer {
         switch (scm.getType()) {
             case CREATE_SCHEMA:
                 futures.add(service.submit(() -> {
-                    Response resp = createSchema(nCols, mConnections.remove());
+                    ServiceThread serviceThread = (ServiceThread) Thread.currentThread();
+                    Response resp = createSchema(nCols, serviceThread.connection);
                     resp.setClientSession(clieSession);
                     return resp;
                 }));
@@ -108,7 +126,8 @@ public abstract class MbServer {
             case POPULATE:
                 futures.add(service.submit(() -> {
                     Object[] args = scm.getArgs();
-                    Response resp = populate((Long) args[0], (Long) args[1], mConnections.remove());
+                    ServiceThread serviceThread = (ServiceThread) Thread.currentThread();
+                    Response resp = populate((Long) args[0], (Long) args[1], serviceThread.connection);
                     resp.setClientSession(clieSession);
                     return resp;
                 }));
@@ -116,15 +135,17 @@ public abstract class MbServer {
             case BATCH_OP:
                 futures.add(service.submit(() -> {
                     Object[] args = scm.getArgs();
+                    ServiceThread serviceThread = (ServiceThread) Thread.currentThread();
                     Response resp = doBatchOp((int) args[0], (double) args[1], (double) args[2], (double) args[3],
-                            (int) args[4], (long) args[5], (long) args[6], (long) args[7], mConnections.remove());
+                            (int) args[4], (long) args[5], (long) args[6], (long) args[7], serviceThread.connection);
                     resp.setClientSession(clieSession);
                     return resp;
                 }));
                 break;
             case Q1:
                 futures.add(service.submit(() -> {
-                    Response resp = query1(mConnections.remove());
+                    ServiceThread serviceThread = (ServiceThread) Thread.currentThread();
+                    Response resp = query1(serviceThread.connection);
                     resp.setClientSession(clieSession);
                     return resp;
                 }));
@@ -132,14 +153,16 @@ public abstract class MbServer {
             case Q2:
                 futures.add(service.submit(() -> {
                     long responseTime = 0;
-                    Response resp = new Response(new Object[]{false, "Q2 is not implemented", responseTime});
+                    Response resp = new Response(new Object[]{true, "Q2 is not needed", responseTime});
+                    resp.setClientSession(clieSession);
                     return resp;
                 }));
                 break;
             case Q3:
                 futures.add(service.submit(() -> {
                     long responseTime = 0;
-                    Response resp = new Response(new Object[]{false, "Q3 is not implemented", responseTime});
+                    Response resp = new Response(new Object[]{true, "Q3 is not needed", responseTime});
+                    resp.setClientSession(clieSession);
                     return resp;
                 }));
                 break;
@@ -162,13 +185,21 @@ public abstract class MbServer {
         if (!commitRes)
             errorMsg = "Error:nTup=" + nTuples;
         Response resp = new Response(new Object[]{commitRes, errorMsg, responseTime});
-        resp.setConnection(mConnection);
-        resp.setResult(responseTime, 0);
+        System.out.println("Query 1 response time: " + responseTime);
         return resp;
     }
 
-    private Response doBatchOp(int nOps, double iProb, double dProb, double uProb, int clientId,
-                               long nClients, long baseInsKey, long baseDelKey, Connection mConnection) {
+    private class UpdatePair {
+        private final long key;
+        private final Tuple tuple;
+        public UpdatePair (long key, Tuple tuple) {
+            this.key = key;
+            this.tuple = tuple;
+        }
+    }
+
+    private Response doBatchOp(final int nOps, final double iProb, final double dProb, final double uProb, final int clientId,
+                               final long nClients, long baseInsKey, long baseDelKey, final Connection mConnection) {
         double gProb = 1.0 - iProb - dProb - uProb;
         if (gProb < 0.0) {
             throw new RuntimeException("Probabilities sum up to negative number");
@@ -176,7 +207,7 @@ public abstract class MbServer {
 
         Map<Long, Tuple> inserts = new HashMap<>();
         Vector<Long> deletes = new Vector<>();
-        Map<Long, Tuple> updates = new HashMap<>();
+        Vector<UpdatePair> updates = new Vector<>();
         Vector<Long> getKeys = new Vector<>();
         double ops[] = new double[nOps];
         for (int i = 0; i < nOps; i++) {
@@ -188,7 +219,7 @@ public abstract class MbServer {
             } else if (ops[i] < iProb + uProb) {
                 // do update
                 long updKey = Tuple.rndKey(baseInsKey, baseDelKey, nClients, clientId);
-                updates.put(updKey, Tuple.rndUpdate(nCols));
+                updates.add(new UpdatePair(updKey, Tuple.rndUpdate(nCols)));
             } else if (ops[i] < iProb + uProb + dProb) {
                 if (baseDelKey + nClients >= baseInsKey) {
                     // do insert
@@ -208,7 +239,7 @@ public abstract class MbServer {
         // do actual operations
         Iterator<Map.Entry<Long, Tuple>> insIter = inserts.entrySet().iterator();
         Iterator<Long> delIter = deletes.iterator();
-        Iterator<Map.Entry<Long, Tuple>> updIter = updates.entrySet().iterator();
+        Iterator<UpdatePair> updIter = updates.iterator();
         Iterator<Long> getIter = getKeys.iterator();
 
         long t0 = System.nanoTime();
@@ -223,8 +254,8 @@ public abstract class MbServer {
                     sucOps ++;
             } else if (ops[i] < iProb + uProb) {
                 // do update
-                Map.Entry<Long, Tuple> nextUpd = updIter.next();
-                if (tx.update(nextUpd.getKey(), nextUpd.getValue()))
+                UpdatePair nextUpd = updIter.next();
+                if (tx.update(nextUpd.key, nextUpd.tuple))
                     sucOps ++;
             } else if (ops[i] < iProb + uProb + dProb) {
                 // do delete
@@ -244,7 +275,6 @@ public abstract class MbServer {
         if (!success)
             errorMsg.append("ERROR:").append("suc=").append(sucOps).append("/").append(nOps);
         Response resp = new Response(new Object[]{success, errorMsg.toString(), baseInsKey, baseDelKey, responseTime});
-        resp.setConnection(mConnection);
         return resp;
     }
 
@@ -268,14 +298,12 @@ public abstract class MbServer {
         if (!success)
             errorMsg.append("ERROR:").append("suc=").append(sucOps).append("/").append(end-start);
         Response resp = new Response(new Object[]{success, errorMsg.toString(), responseTime});
-        resp.setConnection(mConnection);
         return resp;
     }
 
     public Response createSchema(int nCols, Connection mConnection) {
         mConnection.createSchema(nCols);
         Response resp = new Response(new Object[]{true, ""});
-        resp.setConnection(mConnection);
         return resp;
     }
 
@@ -327,7 +355,7 @@ public abstract class MbServer {
                 new HelpFormatter().printHelp("mbench-server", options);
                 System.exit(0);
             }
-            numAsioThreads = Short.parseShort(commandLine.getOptionValue("t", "2"));
+            numAsioThreads = Short.parseShort(commandLine.getOptionValue("t", "12"));
             serverPort = Short.parseShort(commandLine.getOptionValue("p", "8713"));
             nCols = Short.parseShort(commandLine.getOptionValue("n", "10"));
             scaleFactor = Short.parseShort(commandLine.getOptionValue("s"));

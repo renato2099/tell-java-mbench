@@ -7,7 +7,6 @@ public class Response {
 
     private Object[] results;
     private ClientSession clientSession;
-    private MbServer.Connection connection;
 
     public Response(Object...results) {
         this.results = results;
@@ -27,13 +26,5 @@ public class Response {
 
     public ClientSession getClientSession() {
         return clientSession;
-    }
-
-    public void setConnection(MbServer.Connection conn) {
-        this.connection = conn;
-    }
-
-    public MbServer.Connection getConnection() {
-        return connection;
     }
 }
