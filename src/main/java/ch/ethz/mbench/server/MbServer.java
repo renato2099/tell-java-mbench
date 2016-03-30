@@ -156,9 +156,12 @@ public abstract class MbServer {
 
         Transaction tx = mConnection.startTx();
         long nTuples = tx.query1();
-        tx.commit();
+        boolean commitRes = tx.commit();
         long responseTime = System.nanoTime() - t0;
-        Response resp = new Response(new Object[]{true, "nTup=" + nTuples, responseTime});
+        String errorMsg = "";
+        if (!commitRes)
+            errorMsg = "Error:nTup=" + nTuples;
+        Response resp = new Response(new Object[]{commitRes, errorMsg, responseTime});
         resp.setConnection(mConnection);
         resp.setResult(responseTime, 0);
         return resp;
@@ -236,9 +239,10 @@ public abstract class MbServer {
         boolean commitRes = tx.commit();
 
         long responseTime = System.nanoTime() - t0;
-        boolean success = commitRes & (nOps == sucOps);
+        boolean success = commitRes && (nOps == sucOps);
         StringBuilder errorMsg = new StringBuilder();
-        errorMsg.append("suc=").append(sucOps);
+        if (!success)
+            errorMsg.append("ERROR:").append("suc=").append(sucOps).append("/").append(nOps);
         Response resp = new Response(new Object[]{success, errorMsg.toString(), baseInsKey, baseDelKey, responseTime});
         resp.setConnection(mConnection);
         return resp;
@@ -258,10 +262,11 @@ public abstract class MbServer {
         }
         boolean commitRes = tx.commit();
         long responseTime = System.nanoTime() - t0;
-        boolean success = commitRes & (end - start == sucOps);
+        boolean success = commitRes && (end - start == sucOps);
 
         StringBuilder errorMsg = new StringBuilder();
-        errorMsg.append("suc=").append(sucOps);
+        if (!success)
+            errorMsg.append("ERROR:").append("suc=").append(sucOps).append("/").append(end-start);
         Response resp = new Response(new Object[]{success, errorMsg.toString(), responseTime});
         resp.setConnection(mConnection);
         return resp;

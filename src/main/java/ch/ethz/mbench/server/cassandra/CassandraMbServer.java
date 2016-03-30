@@ -113,7 +113,7 @@ public class CassandraMbServer extends MbServer {
                         break;
                 }
             }
-//            sb.append("PRIMARY KEY ((id), A3)");
+//            sb.append("PRIMARY KEY ((id), A0)");
             sb.append("PRIMARY KEY (id)");
             sb.append(");");
 
