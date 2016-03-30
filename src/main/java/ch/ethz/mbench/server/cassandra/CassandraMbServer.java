@@ -6,6 +6,7 @@ import com.datastax.driver.core.querybuilder.*;
 import org.apache.commons.cli.*;
 
 import java.io.IOException;
+import java.util.Vector;
 import java.util.concurrent.ExecutionException;
 
 import com.datastax.driver.core.*;
@@ -132,10 +133,12 @@ public class CassandraMbServer extends MbServer {
     public static class CassandraTransaction implements Transaction {
         private final Session session;
         private Batch batch;
+        private Vector<RegularStatement> gets;
 
         CassandraTransaction(Cluster cluster) {
             session = cluster.connect(CONTAINER);
             batch = QueryBuilder.batch();
+            gets = new Vector();
         }
 
         @Override
@@ -164,18 +167,24 @@ public class CassandraMbServer extends MbServer {
 
         @Override
         public boolean commit() {
-            boolean result = false;
+            boolean batchRes = false;
+            boolean getRes = false;
             try {
-                if (batch != null) {
+                if (gets != null && !gets.isEmpty()) {
+                    for (RegularStatement get : gets) {
+                        session.execute(get);
+                    }
+                    getRes = true;
+                }
+                if (batch != null && batch.hasValues()) {
                     session.execute(batch);
-                    session.close();
-                    result = true;
-                } else
-                    throw new RuntimeException("No operations to be committed!");
+                    batchRes = true;
+                }
+                session.close();
             } catch (Exception e) {
                 e.printStackTrace();
             }
-            return result;
+            return batchRes & getRes;
         }
 
         @Override
@@ -183,7 +192,6 @@ public class CassandraMbServer extends MbServer {
             boolean result = false;
             try {
                 Update update = QueryBuilder.update(CONTAINER, TABLE_NAME);
-
                 for (int i = 0; i < value.getNumFields(); i++) {
                     if (value.getFieldValues() != null)
                         update.with(set(value.getFieldNames()[i], value.getFieldValues()[i]));
@@ -216,11 +224,11 @@ public class CassandraMbServer extends MbServer {
         public boolean get(Long key) {
             boolean result = false;
             try {
-                RegularStatement get = QueryBuilder.select()
+                Select.Where get = QueryBuilder.select()
                         .all()
                         .from(CONTAINER, TABLE_NAME)
                         .where(eq("id", key));
-                batch.add(get);
+                gets.add(get);
                 result = true;
             } catch (Exception e) {
                 e.printStackTrace();
@@ -235,15 +243,6 @@ public class CassandraMbServer extends MbServer {
             ResultSet rs = session.execute(stmt);
             return rs.all().size();
         }
-//        public long query2() {
-//            double upper = Tuple.getRandomDouble(0.0, 0.6);
-//            String query = String.format("select max(a0) from %s.%s where a0 > 0 and a0 < ?",CONTAINER, TABLE_NAME);
-//            PreparedStatement stmt = session.prepare(query);
-//            stmt.bind(upper);
-//            stmt.setConsistencyLevel(ConsistencyLevel.ALL);
-//            ResultSet rs = session.execute(stmt);
-//            return rs.all().size();
-//        }
     }
 
     @Override
