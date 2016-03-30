@@ -7,7 +7,9 @@ import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.HBaseConfiguration;
 import org.apache.hadoop.hbase.HColumnDescriptor;
 import org.apache.hadoop.hbase.HTableDescriptor;
+import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.*;
+import org.apache.hadoop.hbase.client.coprocessor.AggregationClient;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.log4j.Logger;
 
@@ -59,6 +61,7 @@ public class HbaseMbServer extends MbServer {
                 e.printStackTrace();
             }
         }
+
         @Override
         public Transaction startTx() {
             return new HbaseTransaction();
@@ -87,10 +90,17 @@ public class HbaseMbServer extends MbServer {
     public static class HbaseTransaction implements Transaction {
 
         private HTable hTable = null;
+        private AggregationClient aggrClient = null;
 
         HbaseTransaction() {
             try {
-                hTable = new HTable(createHBaseConf(), CONTAINER);
+                Configuration hBaseConf = createHBaseConf();
+                hTable = new HTable(hBaseConf, CONTAINER);
+                aggrClient = new AggregationClient(hBaseConf);
+                // Increase RPC timeout, in case of a slow computation
+//                hBaseConf.setLong("hbase.rpc.timeout", 600000);
+                // Default is 1, set to a higher value for faster scanner.next(..)
+//                hBaseConf.setLong("hbase.client.scanner.caching", 1000);
             } catch (IOException e) {
                 e.printStackTrace();
             }
@@ -213,6 +223,14 @@ public class HbaseMbServer extends MbServer {
 
         @Override
         public long query1() {
+            try {
+                Scan scan = new Scan();
+                scan.addColumn(TABLE_NAME.getBytes(), "A0".getBytes());
+                Double maxVal = aggrClient.max(hTable.getName(), null, scan);
+                System.out.println("MaxVal:" + maxVal);
+            } catch (Throwable throwable) {
+                throwable.printStackTrace();
+            }
             throw new RuntimeException("Query not supported!");
         }
     }
