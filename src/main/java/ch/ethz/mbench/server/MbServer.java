@@ -14,7 +14,7 @@ import java.util.concurrent.*;
  */
 public abstract class MbServer {
 
-    private static String LOCALHOST = "127.0.0.1";
+    private static String LOCALHOST = "0.0.0.0";
 
     private short serverPort;
     private short numAsioThreads;
