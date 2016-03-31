@@ -63,6 +63,7 @@ public abstract class MbServer {
         serverKey = serverChannel.register(selector, SelectionKey.OP_ACCEPT);
 
         try {
+	    System.out.println("Started mbench server");
             while (true)
                 loop();
         } catch (Throwable t) {
