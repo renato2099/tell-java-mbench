@@ -90,7 +90,7 @@
                             <descriptorRefs>
                                 <descriptorRef>jar-with-dependencies</descriptorRef>
                             </descriptorRefs>
-                            <finalName>hbase-mbserver-${project.version}</finalName>
+                            <finalName>mbserver_hbase</finalName>
                         </configuration>
                         <phase>package</phase>
                         <goals>
@@ -110,7 +110,7 @@
                             <descriptorRefs>
                                 <descriptorRef>jar-with-dependencies</descriptorRef>
                             </descriptorRefs>
-                            <finalName>cassandra-mbserver-${project.version}</finalName>
+                            <finalName>mbserver_cassandra</finalName>
                         </configuration>
                         <phase>package</phase>
                         <goals>

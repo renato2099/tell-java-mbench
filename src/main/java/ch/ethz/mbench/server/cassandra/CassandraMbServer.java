@@ -20,7 +20,7 @@ import static com.datastax.driver.core.querybuilder.QueryBuilder.set;
  */
 public class CassandraMbServer extends MbServer {
 
-    private static final int HIGHER_TIMEOUT = 360000000;
+    private static final int HIGHER_TIMEOUT = Integer.MAX_VALUE;//never timeout
     public static final String CONTAINER = "mbench";
     private static final String REPL_FACTOR = "1";
     public static final String TABLE_NAME = "maintable";
