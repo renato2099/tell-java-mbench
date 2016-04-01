@@ -41,8 +41,9 @@ public class CassandraMbServer extends MbServer {
 
     @Override
     protected Connection createConnection() {
-        return new CassandraConnection(clNode, nodePort);
+        return new CassandraConnection(clNode, nodePort, this.getNCols());
     }
+
 
     /**
      * Connection to Cassandra
@@ -52,21 +53,26 @@ public class CassandraMbServer extends MbServer {
         private static Cluster cluster = null;
         private Session session;
         private boolean sessionBound = false;
+        private int nCols;
+        PreparedStatement insertStmt, deleteStmt, updateStmt, query1Stmt, getStmt;
 
-        CassandraConnection(String nodes[], String port) {
+        CassandraConnection(String nodes[], String port, int nCols) {
             if (cluster == null) {
-                cluster = Cluster.builder().withPort(Integer.parseInt(port))
-                        .addContactPoints(nodes).build();
-                cluster.getConfiguration().getSocketOptions().setConnectTimeoutMillis(HIGHER_TIMEOUT).setReadTimeoutMillis(HIGHER_TIMEOUT);
-//                Metadata md = cluster.getMetadata();
-//                Log.info(String.format("Connected to: %s\n", md.getClusterName()));
-//                for (Host h : md.getAllHosts()) {
-//                    Log.debug(String.format("Datatacenter: %s; Host: %s; Rack: %s\n",
-//                            h.getDatacenter(), h.getAddress(), h.getRack()));
-//                }
+                cluster = Cluster.builder().withPort(Integer.parseInt(port)).addContactPoints(nodes).build();
+                cluster.getConfiguration().getSocketOptions().setConnectTimeoutMillis(HIGHER_TIMEOUT);
+                cluster.getConfiguration().getSocketOptions().setReadTimeoutMillis(HIGHER_TIMEOUT);
             }
-
             session = cluster.connect();
+            this.nCols = nCols;
+            // insert
+            insertStmt = session.prepare(doInsertString());
+            // delete
+            deleteStmt = session.prepare(doDeleteString());
+            // get
+            getStmt = session.prepare(doGetString());
+            // query1
+            query1Stmt = session.prepare(String.format("select max(a0) from %s.%s",CONTAINER, TABLE_NAME));
+            query1Stmt.setConsistencyLevel(ConsistencyLevel.ALL);
         }
 
         private void rebindIfNecessary() {
@@ -79,12 +85,13 @@ public class CassandraMbServer extends MbServer {
         @Override
         public Transaction startTx() {
             rebindIfNecessary();
-            return new CassandraTransaction(session);
+            return new CassandraTransaction(session, insertStmt, deleteStmt, updateStmt, query1Stmt, getStmt);
         }
 
         @Override
         public void createSchema(int nCols) {
             // create keyspace
+            this.nCols = nCols;
             StringBuilder sb = new StringBuilder();
             sb.append("CREATE KEYSPACE ").append(CONTAINER).append(" WITH replication ");
             sb.append("= {'class':'SimpleStrategy', 'replication_factor':");
@@ -137,6 +144,37 @@ public class CassandraMbServer extends MbServer {
                 Log.warn("Table already exists!");
             }
         }
+
+
+        private  String doInsertString() {
+            StringBuilder sb = new StringBuilder();
+            StringBuilder params = new StringBuilder();
+            params.append("?,");
+            sb.append("INSERT INTO ").append(CONTAINER).append(".").append(TABLE_NAME).append("(").append("id,");
+            for (int i = 0; i < nCols; i++) {
+                sb.append("A").append(i % 10);
+                params.append("?");
+                if (i+1 < nCols) {
+                    sb.append(",");
+                    params.append(",");
+                }
+            }
+            sb.append(")").append(" values (").append(params.toString()).append(")");
+            return sb.toString();
+        }
+
+        private  String doDeleteString() {
+            StringBuilder sb = new StringBuilder();
+            sb.append("DELETE FROM ").append(CONTAINER).append(".").append(TABLE_NAME).append(" WHERE id = ?");
+            return sb.toString();
+        }
+
+        private  String doGetString() {
+            StringBuilder sb = new StringBuilder();
+            sb.append("SELECT * FROM ").append(CONTAINER).append(".").append(TABLE_NAME).append(" WHERE id = ?");
+            return sb.toString();
+        }
+
     }
 
     /**
@@ -144,24 +182,30 @@ public class CassandraMbServer extends MbServer {
      */
     public static class CassandraTransaction implements Transaction {
         private Session session;
-        private Batch batch;
+        private BatchStatement batch;
+        private PreparedStatement insertStmt, deleteStmt, updateStmt, query1Stmt, getStmt;
         private int batchCounter = 0;
-        private static int MAX_BATCH_SIZE = 1000;
-        private Vector<RegularStatement> gets;
+        private static int MAX_BATCH_SIZE = 100;
+        private Vector<BoundStatement> gets;
 
-        CassandraTransaction(Session sess) {
+        CassandraTransaction(Session sess, PreparedStatement insertStmt, PreparedStatement deleteStmt,
+                PreparedStatement updateStmt, PreparedStatement query1Stmt, PreparedStatement getStmt) {
             session = sess;
-            batch = QueryBuilder.batch();
+            this.insertStmt = insertStmt;
+            this.deleteStmt = deleteStmt;
+            this.updateStmt = updateStmt;
+            this.getStmt = getStmt;
+            this.query1Stmt = query1Stmt;
+            batch = new BatchStatement(BatchStatement.Type.UNLOGGED);
             gets = new Vector();
-
         }
 
         //adds to batch and executes it if necessary
-        private void addToBatch(RegularStatement stmt) {
+        private void addToBatch(Statement stmt) {
             batch.add(stmt);
             if (batchCounter++ >= MAX_BATCH_SIZE) {
                 session.execute(batch);
-                batch = QueryBuilder.batch();
+                batch = new BatchStatement(BatchStatement.Type.UNLOGGED);
                 batchCounter = 0;
             }
         }
@@ -170,6 +214,7 @@ public class CassandraMbServer extends MbServer {
         public boolean insert(Long key, Tuple value) {
             boolean result = false;
             try {
+                QueryBuilder.insertInto(TABLE_NAME);
                 // setting field names up
                 String fieldNames[] = new String[1 + value.getFieldNames().length];
                 fieldNames[0] = "id";
@@ -179,7 +224,7 @@ public class CassandraMbServer extends MbServer {
                 fieldValues[0] = key;
                 System.arraycopy(value.getFieldValues(), 0, fieldValues, 1, value.getFieldValues().length);
                 // preparing statement
-                RegularStatement insert = QueryBuilder.insertInto(TABLE_NAME).values(fieldNames, fieldValues);
+                BoundStatement insert = insertStmt.bind(fieldValues);
                 // is this the right way to set consistency level for Batch?
                 insert.setConsistencyLevel(ConsistencyLevel.ANY);
                 addToBatch(insert);
@@ -195,11 +240,11 @@ public class CassandraMbServer extends MbServer {
             boolean getRes = true;
             try {
                 if (gets != null && !gets.isEmpty()) {
-                    for (RegularStatement get : gets) {
+                    for (BoundStatement get : gets) {
                         session.execute(get);
                     }
                 }
-                if (batch != null && batch.hasValues()) {
+                if (batch != null ) {
                     session.execute(batch);
                 }
             } catch (Exception e) {
@@ -219,7 +264,8 @@ public class CassandraMbServer extends MbServer {
                         update.with(set(value.getFieldNames()[i], value.getFieldValues()[i]));
                 }
                 update.where(eq("id", key));
-                addToBatch(update);
+                batch.add(update);
+//                addToBatch(update);
                 result = true;
             } catch (Exception e) {
                 e.printStackTrace();
@@ -231,8 +277,7 @@ public class CassandraMbServer extends MbServer {
         public boolean remove(Long key) {
             boolean result = false;
             try {
-                Delete.Where delete = QueryBuilder.delete().
-                        from(CONTAINER, TABLE_NAME).where(eq("id", key));
+                BoundStatement delete = deleteStmt.bind(key);
                 delete.setConsistencyLevel(ConsistencyLevel.ANY);
                 addToBatch(delete);
                 result = true;
@@ -246,11 +291,12 @@ public class CassandraMbServer extends MbServer {
         public boolean get(Long key) {
             boolean result = false;
             try {
-                Select.Where get = QueryBuilder.select()
-                        .all()
-                        .from(CONTAINER, TABLE_NAME)
-                        .where(eq("id", key));
-                gets.add(get);
+//                addToBatch(getStmt.bind(key));
+//                Select.Where get = QueryBuilder.select()
+//                        .all()
+//                        .from(CONTAINER, TABLE_NAME)
+//                        .where(eq("id", key));
+                gets.add(getStmt.bind(key));
                 result = true;
             } catch (Exception e) {
                 e.printStackTrace();
@@ -260,9 +306,8 @@ public class CassandraMbServer extends MbServer {
 
         @Override
         public long query1() {
-            Statement stmt = new SimpleStatement(String.format("select max(a0) from %s.%s",CONTAINER, TABLE_NAME));
-            stmt.setConsistencyLevel(ConsistencyLevel.ALL);
-            ResultSet rs = session.execute(stmt);
+
+            ResultSet rs = session.execute(query1Stmt.bind());
             return rs.all().size();
         }
     }

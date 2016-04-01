@@ -79,9 +79,9 @@ public class Tuple {
         return ThreadLocalRandom.current().nextLong(lb, hb);
     }
 
-    public static short getRandomShort(int lb, int hb) {
+    public static int getRandomShort(int lb, int hb) {
         if (hb > Short.MAX_VALUE) hb = Short.MAX_VALUE;
-        return (short) ThreadLocalRandom.current().nextInt(lb, hb);
+        return ThreadLocalRandom.current().nextInt(lb, hb);
     }
 
     public static String getRandomString(int nSyllable) {

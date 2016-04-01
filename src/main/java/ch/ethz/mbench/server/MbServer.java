@@ -14,8 +14,10 @@ import java.util.concurrent.*;
  */
 public abstract class MbServer {
 
+    public static Map<SelectionKey, ClientSession> clientMap = new HashMap<>();
+    public static Logger Log = Logger.getLogger(MbServer.class);
+    public static long clientIds;
     private static String LOCALHOST = "0.0.0.0";
-
     private short serverPort;
     private short numAsioThreads;
     private short nCols;
@@ -23,31 +25,10 @@ public abstract class MbServer {
     // server threads
     private ExecutorService service;
     private List<Future<Response>> futures;
-
     // nio
     private Selector selector;
     private SelectionKey serverKey;
     private ServerSocketChannel serverChannel;
-    public static Map<SelectionKey, ClientSession> clientMap = new HashMap<>();
-    public static Logger Log = Logger.getLogger(MbServer.class);
-    public static long clientIds;
-
-    // service thread keeps its own connection
-    private class ServiceThread extends Thread {
-        private final Connection connection;
-        public ServiceThread(Runnable runnable, Connection connection) {
-            super(runnable);
-            this.connection = connection;
-        }
-    }
-
-    // factory for service threads
-    private class ServiceThreadFactory implements ThreadFactory {
-        @Override
-        public Thread newThread(Runnable runnable) {
-            return new ServiceThread(runnable, createConnection());
-        }
-    }
 
     public void initialize() {
         service = Executors.newFixedThreadPool(numAsioThreads, new ServiceThreadFactory());
@@ -63,7 +44,7 @@ public abstract class MbServer {
         serverKey = serverChannel.register(selector, SelectionKey.OP_ACCEPT);
 
         try {
-	    System.out.println("Started mbench server");
+            System.out.println("Started mbench server");
             while (true)
                 loop();
         } catch (Throwable t) {
@@ -173,8 +154,6 @@ public abstract class MbServer {
         }
     }
 
-
-
     private Response query1(Connection mConnection) {
         long t0 = System.nanoTime();
 
@@ -188,15 +167,6 @@ public abstract class MbServer {
         Response resp = new Response(new Object[]{commitRes, errorMsg, responseTime});
         System.out.println("Query 1 response time: " + responseTime);
         return resp;
-    }
-
-    private class UpdatePair {
-        private final long key;
-        private final Tuple tuple;
-        public UpdatePair (long key, Tuple tuple) {
-            this.key = key;
-            this.tuple = tuple;
-        }
     }
 
     private Response doBatchOp(final int nOps, final double iProb, final double dProb, final double uProb, final int clientId,
@@ -252,20 +222,20 @@ public abstract class MbServer {
                 //do insert
                 Map.Entry<Long, Tuple> nextIns = insIter.next();
                 if (tx.insert(nextIns.getKey(), nextIns.getValue()))
-                    sucOps ++;
+                    sucOps++;
             } else if (ops[i] < iProb + uProb) {
                 // do update
                 UpdatePair nextUpd = updIter.next();
                 if (tx.update(nextUpd.key, nextUpd.tuple))
-                    sucOps ++;
+                    sucOps++;
             } else if (ops[i] < iProb + uProb + dProb) {
                 // do delete
                 if (tx.remove(delIter.next()))
-                    sucOps ++;
+                    sucOps++;
             } else {
                 // do get
                 if (tx.get(getIter.next()))
-                    sucOps ++;
+                    sucOps++;
             }
         }
         boolean commitRes = tx.commit();
@@ -289,7 +259,7 @@ public abstract class MbServer {
         long t0 = System.nanoTime();
         for (Map.Entry<Long, Tuple> ins : inserts.entrySet()) {
             if (tx.insert(ins.getKey(), ins.getValue()))
-                sucOps ++;
+                sucOps++;
         }
         boolean commitRes = tx.commit();
         long responseTime = System.nanoTime() - t0;
@@ -297,7 +267,7 @@ public abstract class MbServer {
 
         StringBuilder errorMsg = new StringBuilder();
         if (!success)
-            errorMsg.append("ERROR:").append("suc=").append(sucOps).append("/").append(end-start);
+            errorMsg.append("ERROR:").append("suc=").append(sucOps).append("/").append(end - start);
         Response resp = new Response(new Object[]{success, errorMsg.toString(), responseTime});
         return resp;
     }
@@ -310,30 +280,8 @@ public abstract class MbServer {
 
     protected abstract Connection createConnection();
 
-    /**
-     * Interface to how connections are created
-     */
-    public interface Connection {
-        Transaction startTx();
-
-        void createSchema(int nCols);
-    }
-
-    /**
-     * Interface to what transactions actually do
-     */
-    public interface Transaction {
-        boolean insert(Long key, Tuple value);
-
-        boolean commit();
-
-        boolean update(Long key, Tuple value);
-
-        boolean remove(Long key);
-
-        boolean get(Long key);
-
-        long query1();
+    public short getNCols() {
+        return nCols;
     }
 
     public Options getCmdLineOptions() {
@@ -364,6 +312,65 @@ public abstract class MbServer {
             System.out.print("Parse error: ");
             new HelpFormatter().printHelp("mbench-server", options);
             System.exit(0);
+        }
+    }
+
+    /**
+     * Interface to how connections are created
+     */
+    public interface Connection {
+
+        Transaction startTx();
+
+        void createSchema(int nCols);
+
+    }
+
+    /**
+     * Interface to what transactions actually do
+     */
+    public interface Transaction {
+
+        boolean insert(Long key, Tuple value);
+
+        boolean commit();
+
+        boolean update(Long key, Tuple value);
+
+        boolean remove(Long key);
+
+        boolean get(Long key);
+
+        long query1();
+
+    }
+
+    // service thread keeps its own connection
+    private class ServiceThread extends Thread {
+        private final Connection connection;
+
+        public ServiceThread(Runnable runnable, Connection connection) {
+            super(runnable);
+            this.connection = connection;
+        }
+    }
+
+    // factory for service threads
+    private class ServiceThreadFactory implements ThreadFactory {
+        @Override
+        public Thread newThread(Runnable runnable) {
+            return new ServiceThread(runnable, createConnection());
+        }
+    }
+
+    private class UpdatePair {
+
+        private final long key;
+        private final Tuple tuple;
+
+        public UpdatePair(long key, Tuple tuple) {
+            this.key = key;
+            this.tuple = tuple;
         }
     }
 }
