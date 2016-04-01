@@ -49,32 +49,41 @@ public class CassandraMbServer extends MbServer {
      */
     public static class CassandraConnection implements Connection {
 
-        private static Cluster cluster;
-        private final Session session;
+        private static Cluster cluster = null;
+        private Session session;
+        private boolean sessionBound = false;
 
         CassandraConnection(String nodes[], String port) {
-            cluster = Cluster.builder().withPort(Integer.parseInt(port))
-                    .addContactPoints(nodes).build();
-            cluster.getConfiguration().getSocketOptions().setConnectTimeoutMillis(HIGHER_TIMEOUT).setReadTimeoutMillis(HIGHER_TIMEOUT);
+            if (cluster == null) {
+                cluster = Cluster.builder().withPort(Integer.parseInt(port))
+                        .addContactPoints(nodes).build();
+                 cluster.getConfiguration().getSocketOptions().setConnectTimeoutMillis(HIGHER_TIMEOUT).setReadTimeoutMillis(HIGHER_TIMEOUT);
+//                Metadata md = cluster.getMetadata();
+//                Log.info(String.format("Connected to: %s\n", md.getClusterName()));
+//                for (Host h : md.getAllHosts()) {
+//                    Log.debug(String.format("Datatacenter: %s; Host: %s; Rack: %s\n",
+//                            h.getDatacenter(), h.getAddress(), h.getRack()));
+//                }
+            }
 
-            session = cluster.connect(CONTAINER);
+            session = cluster.connect();
+        }
 
-            Metadata md = cluster.getMetadata();
-            Log.info(String.format("Connected to: %s\n", md.getClusterName()));
-            for (Host h : md.getAllHosts()) {
-                Log.debug(String.format("Datatacenter: %s; Host: %s; Rack: %s\n",
-                        h.getDatacenter(), h.getAddress(), h.getRack()));
+        private void rebindIfNecessary() {
+            if (!sessionBound) {
+                session = cluster.connect(CONTAINER);
+                sessionBound = true;
             }
         }
 
         @Override
         public Transaction startTx() {
+            rebindIfNecessary();
             return new CassandraTransaction(session);
         }
 
         @Override
         public void createSchema(int nCols) {
-            Session session = cluster.connect();
             // create keyspace
             StringBuilder sb = new StringBuilder();
             sb.append("CREATE KEYSPACE ").append(CONTAINER).append(" WITH replication ");
@@ -124,7 +133,6 @@ public class CassandraMbServer extends MbServer {
             try {
                 session.execute(sb.toString());
                 Log.warn("Table created!");
-                session.close();
             } catch (com.datastax.driver.core.exceptions.AlreadyExistsException ex) {
                 Log.warn("Table already exists!");
             }
