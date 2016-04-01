@@ -57,7 +57,7 @@ public class CassandraMbServer extends MbServer {
             if (cluster == null) {
                 cluster = Cluster.builder().withPort(Integer.parseInt(port))
                         .addContactPoints(nodes).build();
-                 cluster.getConfiguration().getSocketOptions().setConnectTimeoutMillis(HIGHER_TIMEOUT).setReadTimeoutMillis(HIGHER_TIMEOUT);
+                cluster.getConfiguration().getSocketOptions().setConnectTimeoutMillis(HIGHER_TIMEOUT).setReadTimeoutMillis(HIGHER_TIMEOUT);
 //                Metadata md = cluster.getMetadata();
 //                Log.info(String.format("Connected to: %s\n", md.getClusterName()));
 //                for (Host h : md.getAllHosts()) {
@@ -145,6 +145,8 @@ public class CassandraMbServer extends MbServer {
     public static class CassandraTransaction implements Transaction {
         private Session session;
         private Batch batch;
+        private int batchCounter = 0;
+        private static int MAX_BATCH_SIZE = 1000;
         private Vector<RegularStatement> gets;
 
         CassandraTransaction(Session sess) {
@@ -152,6 +154,16 @@ public class CassandraMbServer extends MbServer {
             batch = QueryBuilder.batch();
             gets = new Vector();
 
+        }
+
+        //adds to batch and executes it if necessary
+        private void addToBatch(RegularStatement stmt) {
+            batch.add(stmt);
+            if (batchCounter++ >= MAX_BATCH_SIZE) {
+                session.execute(batch);
+                batch = QueryBuilder.batch();
+                batchCounter = 0;
+            }
         }
 
         @Override
@@ -170,7 +182,7 @@ public class CassandraMbServer extends MbServer {
                 RegularStatement insert = QueryBuilder.insertInto(TABLE_NAME).values(fieldNames, fieldValues);
                 // is this the right way to set consistency level for Batch?
                 insert.setConsistencyLevel(ConsistencyLevel.ANY);
-                batch.add(insert);
+                addToBatch(insert);
                 result = true;
             } catch (Exception e) {
                 e.printStackTrace();
@@ -207,7 +219,7 @@ public class CassandraMbServer extends MbServer {
                         update.with(set(value.getFieldNames()[i], value.getFieldValues()[i]));
                 }
                 update.where(eq("id", key));
-                batch.add(update);
+                addToBatch(update);
                 result = true;
             } catch (Exception e) {
                 e.printStackTrace();
@@ -222,7 +234,7 @@ public class CassandraMbServer extends MbServer {
                 Delete.Where delete = QueryBuilder.delete().
                         from(CONTAINER, TABLE_NAME).where(eq("id", key));
                 delete.setConsistencyLevel(ConsistencyLevel.ANY);
-                batch.add(delete);
+                addToBatch(delete);
                 result = true;
             } catch (Exception e) {
                 e.printStackTrace();

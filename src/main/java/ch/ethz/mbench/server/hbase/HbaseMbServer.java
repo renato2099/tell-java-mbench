@@ -47,29 +47,38 @@ public class HbaseMbServer extends MbServer {
         return new HbaseConnection();
     }
 
+    private static final Configuration hBaseConf = createHBaseConf();
+
+    public static Configuration createHBaseConf() {
+        Configuration hbaseConf = HBaseConfiguration.create();
+        hbaseConf.set("hbase.zookeeper.quorum", zook);
+        hbaseConf.set("hbase.zookeeper.property.clientPort", zkPort);
+        hbaseConf.set("hbase.master", hMaster.concat(":").concat(hPort));
+        hbaseConf.setInt("hbase.hregion.memstore.flush.size", 100 * 1024);
+        hbaseConf.setInt("hbase.regionserver.nbreservationblocks", 1);
+        return hbaseConf;
+    }
+
     /**
      * Creates Hbase connection
      */
     public static class HbaseConnection implements Connection {
-
-        private static HBaseAdmin admin;
-
-        HbaseConnection() {
-            try {
-                admin = new HBaseAdmin(createHBaseConf());
-            } catch (IOException e) {
-                e.printStackTrace();
-            }
-        }
+        private final AggregationClient aggrClient = new AggregationClient(hBaseConf);
 
         @Override
         public Transaction startTx() {
-            return new HbaseTransaction();
+            try {
+                return new HbaseTransaction(aggrClient);
+            } catch (IOException e) {
+                e.printStackTrace();
+                return null;
+            }
         }
 
         @Override
         public void createSchema(int nCols) {
             try {
+                HBaseAdmin admin = new HBaseAdmin(createHBaseConf());
                 HTableDescriptor desc = new HTableDescriptor(CONTAINER);
                 HColumnDescriptor tabName = new HColumnDescriptor(TABLE_NAME);
                 // trying to keep it in memory
@@ -88,22 +97,12 @@ public class HbaseMbServer extends MbServer {
      * Handles operations in Hbase
      */
     public static class HbaseTransaction implements Transaction {
+        private final HTable hTable;
+        private final AggregationClient aggrClient;
 
-        private HTable hTable = null;
-        private AggregationClient aggrClient = null;
-
-        HbaseTransaction() {
-            try {
-                Configuration hBaseConf = createHBaseConf();
-                hTable = new HTable(hBaseConf, CONTAINER);
-                aggrClient = new AggregationClient(hBaseConf);
-                // Increase RPC timeout, in case of a slow computation
-//                hBaseConf.setLong("hbase.rpc.timeout", 600000);
-                // Default is 1, set to a higher value for faster scanner.next(..)
-//                hBaseConf.setLong("hbase.client.scanner.caching", 1000);
-            } catch (IOException e) {
-                e.printStackTrace();
-            }
+        HbaseTransaction(AggregationClient aggrClient) throws IOException{
+            this.aggrClient = aggrClient;
+            hTable = new HTable(hBaseConf, CONTAINER);
         }
 
         @Override
@@ -233,16 +232,6 @@ public class HbaseMbServer extends MbServer {
             }
             throw new RuntimeException("Query not supported!");
         }
-    }
-
-    public static Configuration createHBaseConf() throws IOException {
-        Configuration hbaseConf = HBaseConfiguration.create();
-        hbaseConf.set("hbase.zookeeper.quorum", zook);
-        hbaseConf.set("hbase.zookeeper.property.clientPort", zkPort);
-        hbaseConf.set("hbase.master", hMaster.concat(":").concat(hPort));
-        hbaseConf.setInt("hbase.hregion.memstore.flush.size", 100 * 1024);
-        hbaseConf.setInt("hbase.regionserver.nbreservationblocks", 1);
-        return hbaseConf;
     }
 
     @Override
