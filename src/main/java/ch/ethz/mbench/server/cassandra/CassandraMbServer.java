@@ -185,7 +185,7 @@ public class CassandraMbServer extends MbServer {
      */
     public static class CassandraTransaction implements Transaction {
         private Session session;
-        private BatchStatement batch;
+        private Vector<Statement> batch;
         private PreparedStatement insertStmt, deleteStmt, query1Stmt, getStmt;
         private int batchCounter = 0;
         private static int MAX_BATCH_SIZE = 100;
@@ -198,7 +198,7 @@ public class CassandraMbServer extends MbServer {
             this.deleteStmt = deleteStmt;
             this.getStmt = getStmt;
             this.query1Stmt = query1Stmt;
-            batch = new BatchStatement(BatchStatement.Type.LOGGED);
+            batch = new Vector();
             gets = new Vector();
         }
 
@@ -206,8 +206,9 @@ public class CassandraMbServer extends MbServer {
         private void addToBatch(Statement stmt) {
             batch.add(stmt);
             if (batchCounter++ >= MAX_BATCH_SIZE) {
-                session.execute(batch);
-                batch = new BatchStatement(BatchStatement.Type.UNLOGGED);
+                for (Statement st: batch)
+                    session.execute(st);
+                batch.clear();
                 batchCounter = 0;
             }
         }
@@ -244,8 +245,9 @@ public class CassandraMbServer extends MbServer {
                         session.execute(get);
                     }
                 }
-                if (batch != null ) {
-                    session.execute(batch);
+                if (batch != null && !batch.isEmpty() ) {
+                    for (Statement stmt : batch)
+                        session.execute(stmt);
                 }
             } catch (Exception e) {
                 e.printStackTrace();
