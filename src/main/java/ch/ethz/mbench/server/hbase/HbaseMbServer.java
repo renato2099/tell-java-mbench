@@ -10,6 +10,8 @@ import org.apache.hadoop.hbase.HTableDescriptor;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.*;
 import org.apache.hadoop.hbase.client.coprocessor.AggregationClient;
+import org.apache.hadoop.hbase.client.coprocessor.DoubleColumnInterpreter;
+import org.apache.hadoop.hbase.coprocessor.ColumnInterpreter;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.log4j.Logger;
 
@@ -27,14 +29,15 @@ public class HbaseMbServer extends MbServer {
 
 
     // class attributes
-    private static String zook;
-    private static String zkPort;
-    private static String hMaster;
-    private static String hPort;
+    private static String zook = "";
+    private static String zkPort = "";
+    private static String hMaster = "";
+    private static String hPort = "";
 
     public static void main(String args[]) {
         HbaseMbServer mserver = new HbaseMbServer();
         mserver.parseCmdLine(args);
+        hBaseConf = createHBaseConf();
         try {
             mserver.run();
         } catch (IOException | InterruptedException | ExecutionException e) {
@@ -47,7 +50,7 @@ public class HbaseMbServer extends MbServer {
         return new HbaseConnection();
     }
 
-    private static final Configuration hBaseConf = createHBaseConf();
+    private static Configuration hBaseConf = createHBaseConf();
 
     public static Configuration createHBaseConf() {
         Configuration hbaseConf = HBaseConfiguration.create();
@@ -131,12 +134,14 @@ public class HbaseMbServer extends MbServer {
                             case 3:
                                 put.addColumn(Bytes.toBytes(TABLE_NAME),
                                         Bytes.toBytes(value.getFieldNames()[i]),
-                                        Bytes.toBytes((short) value.getFieldValues()[i]));
+                                        Bytes.toBytes((int)value.getFieldValues()[i]));
+//                                        Bytes.toBytes((short) value.getFieldValues()[i]));
                                 break;
                             case 4:
                                 put.addColumn(Bytes.toBytes(TABLE_NAME),
                                         Bytes.toBytes(value.getFieldNames()[i]),
-                                        Bytes.toBytes((short) value.getFieldValues()[i]));
+//                                        Bytes.toBytes((short) value.getFieldValues()[i]));
+                                Bytes.toBytes((int) value.getFieldValues()[i]));
                                 break;
                             case 5:
                                 put.addColumn(Bytes.toBytes(TABLE_NAME),
@@ -222,15 +227,17 @@ public class HbaseMbServer extends MbServer {
 
         @Override
         public long query1() {
+            long nTuples = -1;
             try {
                 Scan scan = new Scan();
                 scan.addColumn(TABLE_NAME.getBytes(), "A0".getBytes());
-                Double maxVal = aggrClient.max(hTable.getName(), null, scan);
-                System.out.println("MaxVal:" + maxVal);
+                final ColumnInterpreter ci = new DoubleColumnInterpreter();
+                Object maxVal = aggrClient.max(hTable.getName(), ci, scan);
+                nTuples = 1;
             } catch (Throwable throwable) {
                 throwable.printStackTrace();
             }
-            throw new RuntimeException("Query not supported!");
+            return nTuples;
         }
     }
 
