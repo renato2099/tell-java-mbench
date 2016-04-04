@@ -64,21 +64,24 @@ public class CassandraMbServer extends MbServer {
             }
             session = cluster.connect();
             this.nCols = nCols;
-            // insert
-            insertStmt = session.prepare(doInsertString());
-            // delete
-            deleteStmt = session.prepare(doDeleteString());
-            // get
-            getStmt = session.prepare(doGetString());
-            // query1
-            query1Stmt = session.prepare(String.format("select max(a0) from %s.%s",CONTAINER, TABLE_NAME));
-            query1Stmt.setConsistencyLevel(ConsistencyLevel.ALL);
         }
 
         private void rebindIfNecessary() {
             if (!sessionBound) {
                 session = cluster.connect(CONTAINER);
                 sessionBound = true;
+                // insert
+                insertStmt = session.prepare(doInsertString());
+                insertStmt.setConsistencyLevel(ConsistencyLevel.ANY);
+                // delete
+                deleteStmt = session.prepare(doDeleteString());
+                deleteStmt.setConsistencyLevel(ConsistencyLevel.ANY);
+                // get
+                getStmt = session.prepare(doGetString());
+                getStmt.setConsistencyLevel(ConsistencyLevel.ALL);
+                // query1
+                query1Stmt = session.prepare(String.format("select max(a0) from %s.%s", CONTAINER, TABLE_NAME));
+                query1Stmt.setConsistencyLevel(ConsistencyLevel.ALL);
             }
         }
 
@@ -121,7 +124,7 @@ public class CassandraMbServer extends MbServer {
                         break;
                     case 3:
                     case 4:
-                        sb.append("int,");
+                        sb.append("smallint,");
                         break;
                     case 5:
                     case 6:
