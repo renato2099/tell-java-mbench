@@ -54,7 +54,7 @@ public class CassandraMbServer extends MbServer {
         private Session session;
         private boolean sessionBound = false;
         private int nCols;
-        PreparedStatement insertStmt, deleteStmt, updateStmt, query1Stmt, getStmt;
+        PreparedStatement insertStmt, deleteStmt,query1Stmt, getStmt;
 
         CassandraConnection(String nodes[], String port, int nCols) {
             if (cluster == null) {
@@ -88,7 +88,7 @@ public class CassandraMbServer extends MbServer {
         @Override
         public Transaction startTx() {
             rebindIfNecessary();
-            return new CassandraTransaction(session, insertStmt, deleteStmt, updateStmt, query1Stmt, getStmt);
+            return new CassandraTransaction(session, insertStmt, deleteStmt, query1Stmt, getStmt);
         }
 
         @Override
@@ -186,20 +186,19 @@ public class CassandraMbServer extends MbServer {
     public static class CassandraTransaction implements Transaction {
         private Session session;
         private BatchStatement batch;
-        private PreparedStatement insertStmt, deleteStmt, updateStmt, query1Stmt, getStmt;
+        private PreparedStatement insertStmt, deleteStmt, query1Stmt, getStmt;
         private int batchCounter = 0;
         private static int MAX_BATCH_SIZE = 100;
         private Vector<BoundStatement> gets;
 
         CassandraTransaction(Session sess, PreparedStatement insertStmt, PreparedStatement deleteStmt,
-                PreparedStatement updateStmt, PreparedStatement query1Stmt, PreparedStatement getStmt) {
+                PreparedStatement query1Stmt, PreparedStatement getStmt) {
             session = sess;
             this.insertStmt = insertStmt;
             this.deleteStmt = deleteStmt;
-            this.updateStmt = updateStmt;
             this.getStmt = getStmt;
             this.query1Stmt = query1Stmt;
-            batch = new BatchStatement(BatchStatement.Type.UNLOGGED);
+            batch = new BatchStatement(BatchStatement.Type.LOGGED);
             gets = new Vector();
         }
 
@@ -228,8 +227,6 @@ public class CassandraMbServer extends MbServer {
                 System.arraycopy(value.getFieldValues(), 0, fieldValues, 1, value.getFieldValues().length);
                 // preparing statement
                 BoundStatement insert = insertStmt.bind(fieldValues);
-                // is this the right way to set consistency level for Batch?
-                insert.setConsistencyLevel(ConsistencyLevel.ANY);
                 addToBatch(insert);
                 result = true;
             } catch (Exception e) {
@@ -267,8 +264,7 @@ public class CassandraMbServer extends MbServer {
                         update.with(set(value.getFieldNames()[i], value.getFieldValues()[i]));
                 }
                 update.where(eq("id", key));
-                batch.add(update);
-//                addToBatch(update);
+                addToBatch(update);
                 result = true;
             } catch (Exception e) {
                 e.printStackTrace();
@@ -294,11 +290,6 @@ public class CassandraMbServer extends MbServer {
         public boolean get(Long key) {
             boolean result = false;
             try {
-//                addToBatch(getStmt.bind(key));
-//                Select.Where get = QueryBuilder.select()
-//                        .all()
-//                        .from(CONTAINER, TABLE_NAME)
-//                        .where(eq("id", key));
                 gets.add(getStmt.bind(key));
                 result = true;
             } catch (Exception e) {
