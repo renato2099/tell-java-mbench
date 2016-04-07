@@ -60,6 +60,10 @@ public class HbaseMbServer extends MbServer {
         hbaseConf.setInt("hbase.hregion.memstore.flush.size", 100 * 1024);
         hbaseConf.setInt("hbase.regionserver.nbreservationblocks", 1);
         hbaseConf.set("zookeeper.znode.parent", "/hbase-unsecure");
+        hbaseConf.setInt("hbase.rpc.timeout", 1200000);
+        hbaseConf.setInt("hbase.client.scanner.timeout.period", 1200000);
+        hbaseConf.setInt("hbase.cells.scanned.per.heartbeat.check", 10000);//default value
+
         return hbaseConf;
     }
 
@@ -232,6 +236,7 @@ public class HbaseMbServer extends MbServer {
                 scan.addColumn(TABLE_NAME.getBytes(), "A0".getBytes());
                 final ColumnInterpreter ci = new DoubleColumnInterpreter();
                 Object maxVal = aggrClient.max(hTable.getName(), ci, scan);
+System.out.println("Done Scan");
                 nTuples = 1;
             } catch (Throwable throwable) {
                 throwable.printStackTrace();
