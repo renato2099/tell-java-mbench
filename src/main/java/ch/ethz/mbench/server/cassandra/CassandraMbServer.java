@@ -78,7 +78,7 @@ public class CassandraMbServer extends MbServer {
                 deleteStmt.setConsistencyLevel(ConsistencyLevel.ANY);
                 // get
                 getStmt = session.prepare(doGetString());
-                getStmt.setConsistencyLevel(ConsistencyLevel.ALL);
+                getStmt.setConsistencyLevel(ConsistencyLevel.LOCAL_ONE);
                 // query1
                 query1Stmt = session.prepare(String.format("select max(a0) from %s.%s", CONTAINER, TABLE_NAME));
                 query1Stmt.setConsistencyLevel(ConsistencyLevel.ALL);

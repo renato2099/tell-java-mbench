@@ -35,6 +35,8 @@ public class HbaseMbServer extends MbServer {
     public static void main(String args[]) {
         HbaseMbServer mserver = new HbaseMbServer();
         mserver.parseCmdLine(args);
+        
+         hBaseConf = createHBaseConf();
         try {
             mserver.run();
         } catch (IOException | InterruptedException | ExecutionException e) {
@@ -47,7 +49,7 @@ public class HbaseMbServer extends MbServer {
         return new HbaseConnection();
     }
 
-    private static final Configuration hBaseConf = createHBaseConf();
+    private static  Configuration hBaseConf ;
 
     public static Configuration createHBaseConf() {
         Configuration hbaseConf = HBaseConfiguration.create();
@@ -56,6 +58,7 @@ public class HbaseMbServer extends MbServer {
         hbaseConf.set("hbase.master", hMaster.concat(":").concat(hPort));
         hbaseConf.setInt("hbase.hregion.memstore.flush.size", 100 * 1024);
         hbaseConf.setInt("hbase.regionserver.nbreservationblocks", 1);
+        hbaseConf.set("zookeeper.znode.parent", "/hbase-unsecure");
         return hbaseConf;
     }
 
