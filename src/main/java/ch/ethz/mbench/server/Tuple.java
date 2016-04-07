@@ -145,7 +145,7 @@ public class Tuple {
         if (getRandomInt(0, 10) <= 5)
             updTuple.setField(offset + 3, getRandomShort(0, 1));
         else
-            updTuple.setField(offset + 4, getRandomInt(0, 255));
+            updTuple.setField(offset + 4, getRandomShort(0, 255));
         // longs
         if (getRandomInt(0, 10) <= 5)
             updTuple.setField(offset + 5, getRandomLong(Long.MIN_VALUE, 0));
